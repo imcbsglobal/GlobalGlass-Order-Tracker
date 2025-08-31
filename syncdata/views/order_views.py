@@ -7,7 +7,7 @@ from django.utils import timezone
 from django.core.paginator import Paginator
 import json
 import uuid
-from datetime import datetime
+from datetime import datetime, time
 
 from syncdata.models import Order, OrderItem, Cart, CartItem, AccProduct, AccProductBatch, ManualCustomer
 
@@ -343,8 +343,6 @@ def get_orders(request):
         user_id = request.GET.get('user_id')
         client_id = request.GET.get('client_id')
         status = request.GET.get('status', '')
-        from_date = request.GET.get('from_date', '')
-        to_date = request.GET.get('to_date', '')
         page = int(request.GET.get('page', 1))
         per_page = int(request.GET.get('per_page', 20))
         
@@ -353,14 +351,7 @@ def get_orders(request):
         
         if status:
             orders = orders.filter(status=status)
-        
-        if from_date:
-            orders = orders.filter(created_at__date__gte=from_date)
-        
-        if to_date:
-            orders = orders.filter(created_at__date__lte=to_date)
-        
-        # Order by creation date (newest first)
+            
         orders = orders.order_by('-created_at')
         
         # Paginate
