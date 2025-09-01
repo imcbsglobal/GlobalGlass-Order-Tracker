@@ -562,10 +562,51 @@ function loadCartFromLocalStorage() {
     }
   });
 
-  // Update badge to show existing cart items
+  // ✅ Check if we came from editing an existing order
+// ✅ Check if we came from editing an existing order
+// ✅ Check if we came from editing an existing order
+const editingCart = JSON.parse(localStorage.getItem("editing_order_cart") || "[]");
+if (editingCart.length > 0) {
+  editingCart.forEach(async (item) => {
+    if (item.product_code && item.quantity) {
+      cartQuantities[item.product_code] = item.quantity;
+      selectedQuantities[item.product_code] = item.quantity;
+
+      // 🔹 Push immediately to server cart so it persists
+      const customer = JSON.parse(localStorage.getItem('selected_customer') || '{}');
+      const cartData = {
+        user_id: localStorage.getItem("user_id"),
+        client_id: localStorage.getItem("client_id"),
+        customer_name: customer.name || 'Guest',
+        customer_phone: customer.phone || '',
+        customer_address: customer.address || '',
+        product_code: item.product_code,
+        quantity: item.quantity
+      };
+
+      try {
+        await fetch('/api/cart/add/', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(cartData)
+        });
+      } catch (err) {
+        console.error("Failed to sync editing order item:", err);
+      }
+    }
+  });
+
+  // clear so it doesn’t reload again next time
+  localStorage.removeItem("editing_order_cart");
+}
+
+
+
+  // Update UI
   updateCartBadge();
   updateProductHighlights();
 }
+
 
 
 function saveCartToLocalStorage() {
@@ -767,10 +808,10 @@ async function addToCart(productCode) {
       showSuccessMessage(`${product.name} added (${cartQuantities[productCode]} total)`);
 
       // reset selection back to 0
-      selectedQuantities[productCode] = 0;
-      updateQuantityDisplay(productCode);
-      updateQuantityButtons(productCode);
-      updateAddToCartButton(productCode);
+      // selectedQuantities[productCode] = 0;
+      // updateQuantityDisplay(productCode);
+      // updateQuantityButtons(productCode);
+      // updateAddToCartButton(productCode);
 
       // Refresh badge + highlight from server (true single source of truth)
       await updateCartBadge();
@@ -832,27 +873,34 @@ async function updateProductHighlights() {
       });
     }
 
-    products.forEach(p => {
-      if (!p.code) return;
+   products.forEach(p => {
+  if (!p.code) return;
 
-      // combine persisted + session quantities
-      const qty = (existingCart[p.code] || 0);
+  const qty = (existingCart[p.code] || 0);
 
-      // toggle green highlight
-      const row = document.getElementById(`product-${p.code}`);
-      if (row) row.classList.toggle('in-cart', qty > 0);
+  // ✅ Keep quantity box synced with cart
+  selectedQuantities[p.code] = qty;
+  const qtyEl = document.getElementById(`qty-${p.code}`);
+  if (qtyEl) qtyEl.textContent = qty;
+  updateQuantityButtons(p.code);
+  updateAddToCartButton(p.code);
 
-      // keep "In cart: N" text in sync
-      const inCartEl = document.getElementById(`in-cart-${p.code}`);
-      if (inCartEl) {
-        if (qty > 0) {
-          inCartEl.textContent = `In cart: ${qty}`;
-          inCartEl.style.display = 'block';
-        } else {
-          inCartEl.style.display = 'none';
-        }
-      }
-    });
+  // toggle green highlight
+  const row = document.getElementById(`product-${p.code}`);
+  if (row) row.classList.toggle('in-cart', qty > 0);
+
+  // keep "In cart: N" text in sync
+  const inCartEl = document.getElementById(`in-cart-${p.code}`);
+  if (inCartEl) {
+    if (qty > 0) {
+      inCartEl.textContent = `In cart: ${qty}`;
+      inCartEl.style.display = 'block';
+    } else {
+      inCartEl.style.display = 'none';
+    }
+  }
+});
+;
   } catch (error) {
     console.error('Error updating product highlights:', error);
     // Fallback to session items only

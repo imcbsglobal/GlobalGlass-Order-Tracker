@@ -285,7 +285,7 @@
 
       .search-box {
         background: #fff;
-        border: 1px solid #e2e8f0;
+        border: 2px solid #3b82f6;
         border-radius: 8px;
         padding: 12px 16px;
         font-size: 14px;
@@ -417,21 +417,27 @@
         min-width: 80px;
         text-align: center;
       }
+/* Pending = Blue */
+.status-pending {
+  background: #dbeafe;   /* light blue */
+  color: #1e40af;        /* dark blue */
+  border: 1px solid #3b82f6;
+}
 
-      .status-pending {
-        background: #fef3c7;
-        color: #92400e;
-      }
+/* Completed = Green */
+.status-completed {
+  background: #d1fae5;   /* light green */
+  color: #065f46;        /* dark green */
+  border: 1px solid #10b981;
+}
 
-      .status-completed {
-        background: #d1fae5;
-        color: #065f46;
-      }
-
-      .status-cancelled {
-        background: #fee2e2;
-        color: #991b1b;
-      }
+/* Sold Out = Red/Orange */
+.status-cancelled {
+  background: #fee2e2;   /* light red */
+  color: #b91c1c;        /* dark red */
+  border: 1px solid #ef4444;
+}
+w
 
       /* ======== ACTION BUTTONS ======== */
       .action-btn {
@@ -447,31 +453,92 @@
       }
 
       .view-btn {
-        background: #3b82f6;
-        color: #fff;
-      }
+  background: linear-gradient(135deg, #3b82f6, #1d4ed8); /* gradient blue */
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 4px 8px rgba(59, 130, 246, 0.3); /* soft blue shadow */
+  transition: all 0.3s ease;
+}
 
-      .view-btn:hover {
-        background: #2563eb;
-      }
+.view-btn:hover {
+  background: linear-gradient(135deg, #2563eb, #1e40af);
+  transform: translateY(-2px); /* lift effect */
+  box-shadow: 0 6px 14px rgba(37, 99, 235, 0.4);
+}
 
-      .edit-btn {
-        background: #f59e0b;
-        color: #fff;
-      }
+.view-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.3);
+}
 
-      .edit-btn:hover {
-        background: #d97706;
-      }
+.view-btn:focus {
+  outline: none; /* remove black border */
+}
 
-      .delete-btn {
-        background: #ef4444;
-        color: #fff;
-      }
+     .delete-btn {
+  background: linear-gradient(135deg, #ef4444, #b91c1c); /* red gradient */
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 8px rgba(239, 68, 68, 0.3); /* soft red glow */
+  transition: all 0.3s ease;
+}
 
-      .delete-btn:hover {
-        background: #dc2626;
-      }
+.delete-btn:hover {
+  background: linear-gradient(135deg, #dc2626, #991b1b);
+  transform: translateY(-2px); /* lift effect */
+  box-shadow: 0 6px 14px rgba(220, 38, 38, 0.4);
+}
+
+.delete-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 6px rgba(220, 38, 38, 0.3);
+}
+
+.delete-btn:focus {
+  outline: none; /* removes ugly black border */
+}
+/*  */
+.add-products-btn {
+  background: linear-gradient(135deg, #10b981, #059669);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 20px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 4px 8px rgba(16, 185, 129, 0.3);
+  transition: all 0.3s ease;
+}
+
+.add-products-btn:hover {
+  background: linear-gradient(135deg, #059669, #047857);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 14px rgba(5, 150, 105, 0.4);
+}
+
+.add-products-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 6px rgba(5, 150, 105, 0.3);
+}
+
+.add-products-btn:focus {
+  outline: none;
+}
+
 
       /* ======== MODAL ======== */
       .modal {
@@ -853,19 +920,20 @@
               "
             >
               <div class="search-controls" style="flex: 1">
-                <input
-                  type="text"
-                  class="search-box"
-                  id="searchByIdInput"
-                  placeholder="Search by Order ID..."
-                  style="min-width: 250px"
-                />
-                <input
-                  type="text"
-                  class="search-box"
-                  id="searchByNameInput"
-                  placeholder="Search by Customer Name..."
-                />
+               <input
+  type="text"
+  class="search-box"
+  id="searchByNameInput"
+  placeholder="Search by Customer Name or Phone Number"
+/>
+<input
+  type="text"
+  class="search-box"
+  id="searchByIdInput"
+  placeholder="Search by Entry Number or Order ID"
+  style="min-width: 250px"
+/>
+
               </div>
 
               <div class="newOrderDiv">
@@ -1107,31 +1175,36 @@
           <div class="modal-body">
             <!-- Order Details -->
             <div class="order-details">
-              <div class="detail-item">
-                <div class="detail-label">Order ID</div>
-                <div class="detail-value" id="modalOrderId">-</div>
-              </div>
-              <div class="detail-item">
-                <div class="detail-label">Customer Name</div>
-                <div class="detail-value" id="modalCustomerName">-</div>
-              </div>
-              <div class="detail-item">
-                <div class="detail-label">Phone</div>
-                <div class="detail-value" id="modalCustomerPhone">-</div>
-              </div>
-              <div class="detail-item">
-                <div class="detail-label">Address</div>
-                <div class="detail-value" id="modalPlace">-</div>
-              </div>
-              <div class="detail-item">
-                <div class="detail-label">Created By</div>
-                <div class="detail-value" id="modalCreatedBy">-</div>
-              </div>
-              <div class="detail-item">
-                <div class="detail-label">Created On</div>
-                <div class="detail-value" id="modalCreatedOn">-</div>
-              </div>
-            </div>
+  <div class="detail-item">
+    <div class="detail-label">Order ID</div>
+    <div class="detail-value" id="modalOrderId">-</div>
+  </div>
+
+  <div class="detail-item">
+    <div class="detail-label">Created By</div>
+    <div class="detail-value" id="modalCreatedBy">-</div>
+  </div>
+
+  <div class="detail-item">
+    <div class="detail-label">Customer Name</div>
+    <div class="detail-value" id="modalCustomerName">-</div>
+  </div>
+
+  <div class="detail-item">
+    <div class="detail-label">Phone</div>
+    <div class="detail-value" id="modalCustomerPhone">-</div>
+  </div>
+
+  <div class="detail-item">
+    <div class="detail-label">Address</div>
+    <div class="detail-value" id="modalPlace">-</div>
+  </div>
+
+  <div class="detail-item">
+    <div class="detail-label">Created On</div>
+    <div class="detail-value" id="modalCreatedOn">-</div>
+  </div>
+</div>
 
             <!-- Order Items -->
             <h4 style="margin-bottom: 16px; color: #1e293b; padding-left: 10px;">Order Items</h4>
@@ -1175,9 +1248,10 @@
             </div>
           </div>
           <div class="modal-footer">
-            <button class="action-btn edit-btn" id="addProductsFromModal">
-              Add Products
-            </button>
+            <button class="action-btn add-products-btn" id="addProductsFromModal">
+  ➕ Add Products
+</button>
+
             <!-- <button class="action-btn view-btn" id="updateOrderBtn">Update Order</button> -->
           </div>
         </div>
@@ -1450,21 +1524,12 @@
                       >Show Items</button>
                     </td>
                     <td>
-                        <select onchange="updateOrderStatus(${
-                          order.id
-                        }, this.value)" class="status-badge status-${
-            order.status
-          }">
-                            <option value="pending" ${
-                              order.status === "pending" ? "selected" : ""
-                            }>Pending</option>
-                            <option value="completed" ${
-                              order.status === "completed" ? "selected" : ""
-                            }>Completed</option>
-                            <option value="cancelled" ${
-                              order.status === "cancelled" ? "selected" : ""
-                            }>Cancelled</option>
-                        </select>
+                      <select onchange="updateOrderStatus(${order.id}, this.value)" class="status-badge status-${order.status}">
+  <option value="pending" ${order.status === "pending" ? "selected" : ""}>Pending</option>
+  <option value="completed" ${order.status === "completed" ? "selected" : ""}>Completed</option>
+  <option value="cancelled" ${order.status === "cancelled" ? "selected" : ""}>Sold Out</option>
+</select>
+
                     </td>
                     
                     
@@ -1525,8 +1590,9 @@
                 (x) =>
                   x.client_id == localStorage.getItem("client_id") &&
                   x.name === order.customer_name
+                
               );
-
+                
               localStorage.setItem(
                 "selected_customer",
                 JSON.stringify(matchedCustomer)
@@ -1647,34 +1713,30 @@
 
       // Search Functions
       function setupSearch() {
-        document
-          .getElementById("searchByIdInput")
-          .addEventListener("input", function () {
-            const filter = this.value.toLowerCase();
-            const rows = document.querySelectorAll("#orderTableBody tr");
-            rows.forEach((row) => {
-              const orderId =
-                row
-                  .querySelector("td:first-child")
-                  ?.textContent.toLowerCase() || "";
-              row.style.display = orderId.includes(filter) ? "" : "none";
-            });
-          });
+  // Search by Order ID / Entry Number
+  document.getElementById("searchByIdInput")
+    .addEventListener("input", function () {
+      const filter = this.value.toLowerCase();
+      const rows = document.querySelectorAll("#orderTableBody tr");
+      rows.forEach((row) => {
+        const orderId = row.querySelector("td:first-child")?.textContent.toLowerCase() || "";
+        row.style.display = orderId.includes(filter) ? "" : "none";
+      });
+    });
 
-        document
-          .getElementById("searchByNameInput")
-          .addEventListener("input", function () {
-            const filter = this.value.toLowerCase();
-            const rows = document.querySelectorAll("#orderTableBody tr");
-            rows.forEach((row) => {
-              const customerName =
-                row
-                  .querySelector("td:nth-child(2)")
-                  ?.textContent.toLowerCase() || "";
-              row.style.display = customerName.includes(filter) ? "" : "none";
-            });
-          });
-      }
+  // Search by Customer Name OR Phone Number
+  document.getElementById("searchByNameInput")
+    .addEventListener("input", function () {
+      const filter = this.value.toLowerCase();
+      const rows = document.querySelectorAll("#orderTableBody tr");
+      rows.forEach((row) => {
+        const customerName = row.querySelector("td:nth-child(4)")?.textContent.toLowerCase() || "";
+        const customerPhone = row.querySelector("td:nth-child(5)")?.textContent.toLowerCase() || "";
+        row.style.display = (customerName.includes(filter) || customerPhone.includes(filter)) ? "" : "none";
+      });
+    });
+}
+
 
       // Main Functions
       async function loadOrders(method = "") {
@@ -1773,6 +1835,18 @@
             }
           });
       });
+
+      // 
+
+      document.getElementById("addProductsFromModal").addEventListener("click", () => {
+  if (currentOrderDetails && currentOrderDetails.items) {
+    // Save the existing order’s products into localStorage
+    localStorage.setItem("editing_order_cart", JSON.stringify(currentOrderDetails.items));
+  }
+  // Redirect to order page
+  window.location.href = "/order";   // 🔹 change this if your order page URL is different
+});
+
     </script>
   </body>
 </html>
