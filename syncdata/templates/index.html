@@ -1695,26 +1695,29 @@ w
 
       // Filter Functions
       function applyDateFilter() {
-        const fromDate = document.getElementById("fromDate").value;
-        const toDate = document.getElementById("toDate").value;
+  const fromDate = document.getElementById("fromDate").value;
+  const toDate   = document.getElementById("toDate").value;
 
-        currentFilters.fromDate = fromDate;
-        currentFilters.toDate = toDate;
-        currentFilters.page = 1;
+  currentFilters.fromDate = fromDate;
+  currentFilters.toDate   = toDate;
+  currentFilters.page = 1;
 
-        loadOrders("between");
-      }
+  // If both set, do between; else let loadOrders decide the right mode
+  loadOrders(fromDate && toDate ? "between" : "");
+}
 
-      function clearDateFilter() {
-        document.getElementById("fromDate").value = "";
-        document.getElementById("toDate").value = "";
+function clearDateFilter() {
+  document.getElementById("fromDate").value = "";
+  document.getElementById("toDate").value = "";
 
-        currentFilters.fromDate = "";
-        currentFilters.toDate = "";
-        currentFilters.page = 1;
+  currentFilters.fromDate = "";
+  currentFilters.toDate   = "";
+  currentFilters.page = 1;
 
-        loadOrders();
-      }
+  // Show all
+  loadOrders("");
+}
+
 
       // Search Functions
       function setupSearch() {
@@ -1744,22 +1747,44 @@ w
 
 
       // Main Functions
-      async function loadOrders(method = "") {
-        const data = await fetchOrders(currentFilters);
-        let filteredOrders = [];
+      // Main Functions
+async function loadOrders(method = "") {
+  const data = await fetchOrders(currentFilters);
+  const list = Array.isArray(data?.orders) ? data.orders : [];
 
-        if (method == "between") {
-          filteredOrders = data?.orders?.filter(x => {
-            const orderDate = x.created_at.split(' ')[0];
-            return orderDate >= currentFilters.fromDate && orderDate <= currentFilters.toDate;
-          });
-        } else {
-          filteredOrders = data?.orders?.filter(x => x.created_at.split(' ')[0] === currentFilters.fromDate);
-        }
+  // Normalize API date to YYYY-MM-DD once
+  const toYMD = (created_at) => {
+    if (!created_at) return "";
+    // handles "YYYY-MM-DD HH:mm:ss" and "YYYY-MM-DD"
+    return String(created_at).split(" ")[0];
+  };
 
-        orderData = filteredOrders;
-        populateTable(orderData);
-      }
+  const from = currentFilters.fromDate || "";
+  const to   = currentFilters.toDate   || "";
+
+  let filtered = list;
+
+  // If both dates empty => show ALL
+  if (!from && !to) {
+    filtered = list;
+  } else if (method === "between" && from && to) {
+    // Range filter (inclusive)
+    filtered = list.filter(x => {
+      const d = toYMD(x.created_at);
+      return d >= from && d <= to;
+    });
+  } else if (from && !to) {
+    // Only From set => exact match day
+    filtered = list.filter(x => toYMD(x.created_at) === from);
+  } else if (!from && to) {
+    // Only To set => everything up to that day
+    filtered = list.filter(x => toYMD(x.created_at) <= to);
+  }
+
+  orderData = filtered;
+  populateTable(orderData); // existing renderer
+}
+
 
       function redirectToAddProducts() {
         window.location.href = "{% url 'orders' %}";
@@ -1843,23 +1868,27 @@ w
 
       // 
 
-      document.getElementById("addProductsFromModal").addEventListener("click", () => {
-  if (currentOrderDetails && currentOrderDetails.items) {
-    // Save the existing order’s products into localStorage
-    localStorage.setItem("editing_order_cart", JSON.stringify(currentOrderDetails.items));
-  }
-  // Redirect to order page
-  window.location.href = "/order";   // 🔹 change this if your order page URL is different
+   document.getElementById("addProductsFromModal").addEventListener("click", () => {
+  if (!currentOrderDetails) return;
+
+  // make sure order.html knows which order we’re editing
+  const ord = currentOrderDetails;
+
+  // save customer (for header on order.html)
+  localStorage.setItem('selected_customer', JSON.stringify({
+    name:  ord.customer_name,
+    phone: ord.customer_phone || '',
+    address: ord.customer_address || ord.customer_place || ''
+  }));
+
+  // optional: quick preload before API returns on order.html
+  localStorage.setItem("editing_order", JSON.stringify(ord));
+  localStorage.setItem("editing_order_cart", JSON.stringify(ord.items || []));
+
+  // go to order page IN EDIT MODE with the order_id
+  window.location.href = "{% url 'orders' %}?mode=edit&order_id=" + ord.id;
 });
 
-// 
-function addProductsForCustomer(customer) {
-  // save customer info so order.html knows who we’re editing
-  localStorage.setItem('selected_customer', JSON.stringify(customer));
-
-  // go to order page in edit mode (so cart/customer is NOT reset)
-  window.location.href = '/order/?mode=edit';
-}
 
     </script>
   </body>
