@@ -166,7 +166,9 @@ body {
 .cart-icon { text-decoration: none; font-size: 24px; position: relative; color: var(--primary-color); transition: transform 0.2s; }
 .cart-icon:hover { transform: scale(1.1); }
 .cart-badge {
-    position: absolute; top: -8px; right: -10px;
+    position: absolute; top: -8px; right: -10px;  min-width: 35px;
+    padding: 2px 6px;
+    font-size: 12px;
     background-color: var(--danger-color); color: white;
     border-radius: 50%; padding: 2px 6px; font-size: 12px; min-width: 20px; text-align: center;
 }
@@ -456,6 +458,8 @@ const itemsPerPage = 10;
 let isSearching = false;
 let searchTerm = '';
 let customerList = [];
+let serverCartQuantities = {}; // { [product_code]: qty currently in the cart }
+
 
 function confirmBack() {
   if (confirm("Are you sure you want to go back? Unsaved changes may be lost.")) {
@@ -562,51 +566,10 @@ function loadCartFromLocalStorage() {
     }
   });
 
-  // ✅ Check if we came from editing an existing order
-// ✅ Check if we came from editing an existing order
-// ✅ Check if we came from editing an existing order
-const editingCart = JSON.parse(localStorage.getItem("editing_order_cart") || "[]");
-if (editingCart.length > 0) {
-  editingCart.forEach(async (item) => {
-    if (item.product_code && item.quantity) {
-      cartQuantities[item.product_code] = item.quantity;
-      selectedQuantities[item.product_code] = item.quantity;
-
-      // 🔹 Push immediately to server cart so it persists
-      const customer = JSON.parse(localStorage.getItem('selected_customer') || '{}');
-      const cartData = {
-        user_id: localStorage.getItem("user_id"),
-        client_id: localStorage.getItem("client_id"),
-        customer_name: customer.name || 'Guest',
-        customer_phone: customer.phone || '',
-        customer_address: customer.address || '',
-        product_code: item.product_code,
-        quantity: item.quantity
-      };
-
-      try {
-        await fetch('/api/cart/add/', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(cartData)
-        });
-      } catch (err) {
-        console.error("Failed to sync editing order item:", err);
-      }
-    }
-  });
-
-  // clear so it doesn’t reload again next time
-  localStorage.removeItem("editing_order_cart");
-}
-
-
-
-  // Update UI
+  // Update badge to show existing cart items
   updateCartBadge();
   updateProductHighlights();
 }
-
 
 
 function saveCartToLocalStorage() {
@@ -768,18 +731,31 @@ function updateQuantityButtons(productCode) {
   }
 }
 function updateAddToCartButton(productCode) {
-  const productRow = document.getElementById(`product-${productCode}`);
-  if (productRow) {
-    const addBtn = productRow.querySelector('.add-to-cart-btn');
-    if (addBtn) {
-      addBtn.disabled = selectedQuantities[productCode] <= 0;
-      addBtn.title = `Add ${selectedQuantities[productCode]} to Cart`;
-    }
-  }
+  const row = document.getElementById(`product-${productCode}`);
+  if (!row) return;
+  const btn = row.querySelector('.add-to-cart-btn');
+  if (!btn) return;
+
+  const desired = selectedQuantities[productCode] || 0;
+  const current = serverCartQuantities[productCode] || 0;
+  const delta = desired - current;
+
+  btn.disabled = delta <= 0;
+  btn.title = delta > 0 ? `Add ${delta} more` : `No change`;
 }
 
+
 async function addToCart(productCode) {
-  const qty = selectedQuantities[productCode] || 1;
+  // what user wants (from the quantity section)
+  const desiredQty = selectedQuantities[productCode] || 0;
+  // what’s already in the cart (from server)
+  const currentServerQty = serverCartQuantities[productCode] || 0;
+
+  const delta = desiredQty - currentServerQty;
+  if (delta <= 0) {
+    showSuccessMessage?.("No change — quantity already in cart");
+    return;
+  }
 
   try {
     const customer = JSON.parse(localStorage.getItem('selected_customer') || '{}');
@@ -790,7 +766,7 @@ async function addToCart(productCode) {
       customer_phone: customer.phone || '',
       customer_address: customer.address || '',
       product_code: productCode,
-      quantity: qty
+      quantity: delta         // << only the increment
     };
 
     const response = await fetch('/api/cart/add/', {
@@ -801,21 +777,27 @@ async function addToCart(productCode) {
 
     const data = await response.json();
     if (data.success) {
-      // ✅ Instead of replacing, sync with server
-      cartQuantities[productCode] = (cartQuantities[productCode] || 0) + qty;
+      // server now equals desired
+      serverCartQuantities[productCode] = desiredQty;
+
+      // update local mirrors
+      cartQuantities[productCode] = desiredQty;
+
+      // update BOTH UI spots
+      const inCartEl = document.getElementById(`in-cart-${productCode}`);
+      if (inCartEl) {
+        inCartEl.textContent = `In cart: ${desiredQty}`;
+        inCartEl.style.display = desiredQty > 0 ? 'block' : 'none';
+      }
+      const qtyEl = document.getElementById(`qty-${productCode}`);
+      if (qtyEl) qtyEl.textContent = desiredQty;
+
+      await updateCartBadge?.();
+      updateQuantityButtons?.(productCode);
+      updateAddToCartButton?.(productCode);
 
       const product = products.find(p => p.code === productCode);
-      showSuccessMessage(`${product.name} added (${cartQuantities[productCode]} total)`);
-
-      // reset selection back to 0
-      // selectedQuantities[productCode] = 0;
-      // updateQuantityDisplay(productCode);
-      // updateQuantityButtons(productCode);
-      // updateAddToCartButton(productCode);
-
-      // Refresh badge + highlight from server (true single source of truth)
-      await updateCartBadge();
-      await updateProductHighlights();
+      showSuccessMessage?.(`${product?.name || productCode} updated (In cart: ${desiredQty})`);
     } else {
       throw new Error(data.error || 'Failed to add to cart');
     }
@@ -824,6 +806,7 @@ async function addToCart(productCode) {
     showErrorMessage("Failed to add to cart: " + error.message);
   }
 }
+
 
 async function updateCartBadge() {
   try {
@@ -837,12 +820,17 @@ async function updateCartBadge() {
     const response = await fetch(`/api/cart/get/?${params}`);
     const data = await response.json();
 
-    let totalItems = 0;
-    if (data.success && data.cart && data.cart.items) {
-      totalItems = data.cart.items.reduce((sum, item) => sum + item.quantity, 0);
-    }
+   let totalQuantity = 0;
+let itemCount = 0;
 
-    document.getElementById('cartBadge').textContent = totalItems;
+if (data.success && data.cart && data.cart.items) {
+  itemCount = data.cart.items.length;  // unique items
+  totalQuantity = data.cart.items.reduce((sum, item) => sum + item.quantity, 0);
+}
+
+// Show as "items | quantity"
+document.getElementById('cartBadge').textContent = `${itemCount} | ${totalQuantity}`;
+
   } catch (error) {
     console.error('Error updating cart badge:', error);
 
@@ -873,34 +861,40 @@ async function updateProductHighlights() {
       });
     }
 
-   products.forEach(p => {
-  if (!p.code) return;
+    products.forEach(p => {
+      if (!p.code) return;
 
-  const qty = (existingCart[p.code] || 0);
+      // combine persisted + session quantities
+      const qty = (existingCart[p.code] || 0);
 
-  // ✅ Keep quantity box synced with cart
-  selectedQuantities[p.code] = qty;
-  const qtyEl = document.getElementById(`qty-${p.code}`);
-  if (qtyEl) qtyEl.textContent = qty;
-  updateQuantityButtons(p.code);
-  updateAddToCartButton(p.code);
+      // toggle green highlight
+      const row = document.getElementById(`product-${p.code}`);
+      if (row) row.classList.toggle('in-cart', qty > 0);
 
-  // toggle green highlight
-  const row = document.getElementById(`product-${p.code}`);
-  if (row) row.classList.toggle('in-cart', qty > 0);
+      // keep "In cart: N" text in sync
+      const inCartEl = document.getElementById(`in-cart-${p.code}`);
+      if (inCartEl) {
+        if (qty > 0) {
+          inCartEl.textContent = `In cart: ${qty}`;
+          inCartEl.style.display = 'block';
+        } else {
+          inCartEl.style.display = 'none';
+        }
+      }
+      // keep a copy of server-side qty
+serverCartQuantities[p.code] = qty;
 
-  // keep "In cart: N" text in sync
-  const inCartEl = document.getElementById(`in-cart-${p.code}`);
-  if (inCartEl) {
-    if (qty > 0) {
-      inCartEl.textContent = `In cart: ${qty}`;
-      inCartEl.style.display = 'block';
-    } else {
-      inCartEl.style.display = 'none';
-    }
-  }
-});
-;
+// mirror into the quantity control
+selectedQuantities[p.code] = qty;
+const qtyEl = document.getElementById(`qty-${p.code}`);
+if (qtyEl) qtyEl.textContent = qty;
+
+// keep buttons consistent
+updateQuantityButtons?.(p.code);
+updateAddToCartButton?.(p.code);
+
+
+    });
   } catch (error) {
     console.error('Error updating product highlights:', error);
     // Fallback to session items only
@@ -1278,7 +1272,8 @@ function placeOrder() {
   window.location.href = "/"; // back to dashboard
 }
 
+// 
 
-    </script>
+</script>
 </body>
 </html>

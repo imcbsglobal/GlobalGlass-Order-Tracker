@@ -1269,6 +1269,11 @@ w
         page: 1,
       };
 
+
+
+
+
+
       // User data (you'll need to pass this from Django)
       const userData = {
         user_id: localStorage.getItem("user_id"),
@@ -1846,6 +1851,15 @@ w
   // Redirect to order page
   window.location.href = "/order";   // 🔹 change this if your order page URL is different
 });
+
+// 
+function addProductsForCustomer(customer) {
+  // save customer info so order.html knows who we’re editing
+  localStorage.setItem('selected_customer', JSON.stringify(customer));
+
+  // go to order page in edit mode (so cart/customer is NOT reset)
+  window.location.href = '/order/?mode=edit';
+}
 
     </script>
   </body>
