@@ -1259,421 +1259,483 @@ w
     </div>
 
     <script>
+  // Global variables
+  let orderData = [];
+  let currentOrderDetails = null;
+  let currentFilters = {
+    fromDate: "",
+    toDate: "",
+    status: "",
+    page: 1,
+  };
 
+  // User data (you'll need to pass this from Django)
+  const userData = {
+    user_id: localStorage.getItem("user_id"),
+    client_id: localStorage.getItem("client_id"),
+  };
 
+  // API Base URL (set this if your API is hosted on another origin)
+  const API_BASE = "";
 
+  // Utility functions
+  function formatPrice(price) {
+    if (price == null || price === "") return "₹0.00";
+    return "₹" + Number(price).toFixed(2);
+  }
 
+  function formatDate(dateString) {
+    if (!dateString) return "-";
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) return dateString; // fallback if already formatted
+    return date.toLocaleDateString("en-GB");
+  }
 
-      // Global variables
-      let orderData = [];
-      let currentOrderDetails = null;
-      let currentFilters = {
-        fromDate: "",
-        toDate: "",
-        status: "",
-        page: 1,
-      };
+  function showSuccessMessage(message) {
+    const successDiv = document.createElement("div");
+    successDiv.className = "success-message";
+    successDiv.textContent = message;
+    document.body.appendChild(successDiv);
+    setTimeout(() => successDiv.remove(), 3000);
+  }
 
+  function showErrorMessage(message) {
+    const errorDiv = document.createElement("div");
+    errorDiv.className = "success-message";
+    errorDiv.style.background = "#ef4444";
+    errorDiv.textContent = message;
+    document.body.appendChild(errorDiv);
+    setTimeout(() => errorDiv.remove(), 3000);
+  }
 
+  // API Functions
+  async function fetchOrders(filters = {}) {
+    try {
+      const params = new URLSearchParams({
+        user_id: userData.user_id,
+        client_id: userData.client_id,
+        page: filters.page || 1,
+        per_page: 20,
+      });
 
+      if (filters.status) params.append("status", filters.status);
 
+      const response = await fetch(`${API_BASE}/api/orders/get/?${params.toString()}`);
+      const data = await response.json();
 
-
-      // User data (you'll need to pass this from Django)
-      const userData = {
-        user_id: localStorage.getItem("user_id"),
-        client_id: localStorage.getItem("client_id"),
-      };
-
-      // API Base URL
-      const API_BASE = "";
-
-      // Utility functions
-      function formatPrice(price) {
-        return "₹" + parseFloat(price).toFixed(2);
+      if (data.success) {
+        return data;
+      } else {
+        throw new Error(data.error || "Failed to fetch orders");
       }
-
-      function formatDate(dateString) {
-        const date = new Date(dateString);
-        return date.toLocaleDateString("en-GB");
-      }
-
-      function showSuccessMessage(message) {
-        const successDiv = document.createElement("div");
-        successDiv.className = "success-message";
-        successDiv.textContent = message;
-        document.body.appendChild(successDiv);
-        setTimeout(() => successDiv.remove(), 3000);
-      }
-
-      function showErrorMessage(message) {
-        const errorDiv = document.createElement("div");
-        errorDiv.className = "success-message";
-        errorDiv.style.background = "#ef4444";
-        errorDiv.textContent = message;
-        document.body.appendChild(errorDiv);
-        setTimeout(() => errorDiv.remove(), 3000);
-      }
-
-      // API Functions
-      async function fetchOrders(filters = {}) {
-        try {
-          const params = new URLSearchParams({
-            user_id: userData.user_id,
-            client_id: userData.client_id,
-            page: filters.page || 1,
-            per_page: 20,
-          });
-
-          if (filters.status) params.append("status", filters.status);
-
-          const response = await fetch(`${API_BASE}/api/orders/get/?${params}`);
-          const data = await response.json();
-
-          if (data.success) {
-            return data;
-          } else {
-            throw new Error(data.error || "Failed to fetch orders");
-          }
-        } catch (error) {
-          console.error("Error fetching orders:", error);
-          showErrorMessage("Failed to load orders");
-          return { orders: [], pagination: {} };
-        }
-      }
-
-      async function updateOrderStatus(orderId, newStatus) {
-        try {
-          const response = await fetch(
-            `${API_BASE}/api/orders/update-status/`,
-            {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                order_id: orderId,
-                status: newStatus,
-              }),
-            }
-          );
-
-          const data = await response.json();
-          if (data.success) {
-            showSuccessMessage("Order status updated successfully");
-            loadOrders();
-          } else {
-            throw new Error(data.error || "Failed to update order status");
-          }
-        } catch (error) {
-          console.error("Error updating order status:", error);
-          showErrorMessage("Failed to update order status");
-        }
-      }
-
-      async function deleteOrder(orderId) {
-  if (!confirm("Are you sure you want to delete this order?")) return;
-
-  try {
-    const response = await fetch(`${API_BASE}/api/orders/delete/`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ order_id: orderId }),
-    });
-
-    const data = await response.json();
-    if (data.success) {
-      showSuccessMessage("Order deleted successfully");
-
-      // 1) update local cache
-      orderData = (orderData || []).filter(o => o.id !== orderId);
-
-      // 2) remove just that row from the DOM
-      const row = document.querySelector(
-        `#orderTableBody tr[data-order-id="${orderId}"]`
-      );
-      if (row) row.remove();
-
-      // 3) if nothing left after filters, show empty-state row
-      const tbody = document.getElementById("orderTableBody");
-      if (!tbody.querySelector("tr")) {
-        tbody.innerHTML =
-          '<tr><td colspan="9" style="text-align: center; padding: 40px; color: #64748b;">No orders found</td></tr>';
-      }
-    } else {
-      throw new Error(data.error || "Failed to delete order");
+    } catch (error) {
+      console.error("Error fetching orders:", error);
+      showErrorMessage("Failed to load orders");
+      return { orders: [], pagination: {} };
     }
-  } catch (error) {
-    console.error("Error deleting order:", error);
-    showErrorMessage("Failed to delete order");
   }
-}
 
+  async function updateOrderStatus(orderId, newStatus) {
+    try {
+      const response = await fetch(`${API_BASE}/api/orders/update-status/`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          order_id: orderId,
+          status: newStatus,
+        }),
+      });
 
-      async function deleteOrderItem(itemId) {
-        if (!confirm("Are you sure you want to delete this item?")) return;
+      const data = await response.json();
+      if (data.success) {
+        showSuccessMessage("Order status updated successfully");
+        loadOrders();
+      } else {
+        throw new Error(data.error || "Failed to update order status");
+      }
+    } catch (error) {
+      console.error("Error updating order status:", error);
+      showErrorMessage("Failed to update order status");
+    }
+  }
 
+  async function deleteOrder(orderId) {
+    if (!confirm("Are you sure you want to delete this order?")) return;
+
+    try {
+      const response = await fetch(`${API_BASE}/api/orders/delete/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ order_id: orderId }),
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        showSuccessMessage("Order deleted successfully");
+
+        // 1) update local cache
+        orderData = (orderData || []).filter((o) => o.id !== orderId);
+
+        // 2) remove just that row from the DOM
+        const row = document.querySelector(`#orderTableBody tr[data-order-id="${orderId}"]`);
+        if (row) row.remove();
+
+        // 3) if nothing left after filters, show empty-state row
+        const tbody = document.getElementById("orderTableBody");
+        if (!tbody.querySelector("tr")) {
+          tbody.innerHTML =
+            '<tr><td colspan="9" style="text-align: center; padding: 40px; color: #64748b;">No orders found</td></tr>';
+        }
+      } else {
+        throw new Error(data.error || "Failed to delete order");
+      }
+    } catch (error) {
+      console.error("Error deleting order:", error);
+      showErrorMessage("Failed to delete order");
+    }
+  }
+
+  async function deleteOrderItem(itemId) {
+    if (!confirm("Are you sure you want to delete this item?")) return;
+
+    try {
+      const response = await fetch(`${API_BASE}/api/orders/delete-item/`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          item_id: itemId,
+        }),
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        showSuccessMessage("Order item deleted successfully");
+        // refresh modal and list
+        if (currentOrderDetails && currentOrderDetails.id) {
+          // re-fetch current order to reflect server state
+          await viewOrder(currentOrderDetails.id);
+        }
+        loadOrders();
+      } else {
+        throw new Error(data.error || "Failed to delete order item");
+      }
+    } catch (error) {
+      console.error("Error deleting order item:", error);
+      showErrorMessage("Failed to delete order item");
+    }
+  }
+
+  // UI Functions
+  function populateTable(orders = []) {
+    const tbody = document.getElementById("orderTableBody");
+
+    if (orders.length === 0) {
+      tbody.innerHTML =
+        '<tr><td colspan="9" style="text-align: center; padding: 40px; color: #64748b;">No orders found</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = "";
+    orders.forEach((order) => {
+      const row = document.createElement("tr");
+      row.setAttribute("data-order-id", order.id); // <-- add this
+      row.innerHTML = `
+        <td>${order.order_number}</td>
+        <td>${formatDate(order.created_at)}</td>
+        <td>${localStorage.getItem("user_id") || "Guest"}</td>
+        <td>${order.customer_name || "-"}</td>
+        <td>${order.customer_phone || "-"}</td>
+        <td>${order.total_quantity || 0}</td>
+        <td>${formatPrice(order.total_amount || 0)}</td>
+        <td>
+          <button class="action-btn view-btn" onclick="viewOrder(${order.id})" title="View Details">Show Items</button>
+        </td>
+        <td>
+          <select onchange="updateOrderStatus(${order.id}, this.value)" class="status-badge status-${order.status}">
+            <option value="pending" ${order.status === "pending" ? "selected" : ""}>Pending</option>
+            <option value="completed" ${order.status === "completed" ? "selected" : ""}>Completed</option>
+            <option value="cancelled" ${order.status === "cancelled" ? "selected" : ""}>Sold Out</option>
+          </select>
+        </td>
+        <td>
+          <button class="action-btn delete-btn" onclick="deleteOrder(${order.id})" title="Delete Order">🗑️</button>
+        </td>
+      `;
+      tbody.appendChild(row);
+    });
+  }
+
+  let itemDisplayOrder = new Map(); // To store the initial display order
+
+  async function viewOrder(orderId) {
+    try {
+      const response = await fetch(
+        `${API_BASE}/api/orders/get/?user_id=${userData.user_id}&client_id=${userData.client_id}&order_id=${orderId}`
+      );
+      const data = await response.json();
+
+      if (!data.success || !Array.isArray(data.orders) || data.orders.length === 0) {
+        throw new Error("Order not found");
+      }
+
+      // locate the order (defensive)
+      const order = data.orders.find((item) => String(item.id) === String(orderId)) || data.orders[0];
+      currentOrderDetails = order;
+
+      // Update modal header (safe defaults)
+      document.getElementById("modalOrderId").textContent = order.order_number || `#${orderId}`;
+      document.getElementById("modalCustomerName").textContent = order.customer_name || "-";
+      document.getElementById("modalCustomerPhone").textContent = order.customer_phone || "-";
+      document.getElementById("modalPlace").textContent = order.customer_address || "-";
+      document.getElementById("modalCreatedBy").textContent = userData.user_id || "-";
+      document.getElementById("modalCreatedOn").textContent = formatDate(order.created_at);
+
+      // Try to fetch server customers and match; fallback to manual customer object if no match
+      let customerList = [];
+      try {
+        const customersResp = await fetch("/customers/", {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("access_token")}`,
+          },
+        });
+        if (customersResp.ok) {
+          customerList = await customersResp.json();
+        } else {
+          customerList = [];
+        }
+      } catch (e) {
+        console.warn("Failed to fetch customers list:", e);
+        customerList = [];
+      }
+
+      const matchedCustomer = Array.isArray(customerList)
+        ? customerList.find(
+            (x) =>
+              x.client_id == (localStorage.getItem("client_id") || userData.client_id) &&
+              x.name === order.customer_name
+          )
+        : null;
+
+      if (matchedCustomer) {
+        localStorage.setItem("selected_customer", JSON.stringify(matchedCustomer));
+      } else {
+        // fallback manual customer so order.html edit mode can use it
+        const manualCustomer = {
+          client_id: localStorage.getItem("client_id") || order.client_id || "",
+          name: order.customer_name || "",
+          phone: order.customer_phone || "",
+          address: order.customer_address || "",
+          __manual_from_order: true,
+        };
+        localStorage.setItem("selected_customer", JSON.stringify(manualCustomer));
+
+        // Also include manual_customers list entry (optional, helpful for dropdowns)
         try {
-          const response = await fetch(`${API_BASE}/api/orders/delete-item/`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              item_id: itemId,
-            }),
+          const existingManual = JSON.parse(localStorage.getItem("manual_customers") || "[]");
+          const already = Array.isArray(existingManual) && existingManual.find((m) => m.name === manualCustomer.name && m.client_id === manualCustomer.client_id);
+          if (!already) {
+            const updated = Array.isArray(existingManual) ? [...existingManual, manualCustomer] : [manualCustomer];
+            localStorage.setItem("manual_customers", JSON.stringify(updated));
+          }
+        } catch (e) {
+          // ignore parse errors
+          localStorage.setItem("manual_customers", JSON.stringify([manualCustomer]));
+        }
+      }
+
+      // Save editing_order and editing_order_cart for the edit flow
+      localStorage.setItem("editing_order", JSON.stringify(order));
+      const editingCart = (order.items || []).map((it) => ({
+        id: it.id,
+        product_code: it.product_code || it.sku || it.product_id || "",
+        product_name: it.product_name || it.name || "",
+        quantity: it.quantity || it.qty || 0,
+        unit_price: it.unit_price != null ? it.unit_price : it.price || 0,
+        total_price: (it.quantity || it.qty || 0) * (it.unit_price || it.price || 0),
+        raw: it,
+      }));
+      localStorage.setItem("editing_order_cart", JSON.stringify(editingCart));
+
+      // Update items table (stable on-screen order)
+      const itemsList = document.getElementById("modalOrderItemsList");
+      if (!itemsList) {
+        console.warn("modalOrderItemsList element not found");
+      } else {
+        itemsList.innerHTML = "";
+
+        // Capture the initial display order only once per modal open
+        if (itemDisplayOrder.size === 0) {
+          (order.items || []).forEach((it, idx) => {
+            const key = it.id != null ? String(it.id) : `idx-${idx}`;
+            itemDisplayOrder.set(key, idx);
           });
-
-          const data = await response.json();
-          if (data.success) {
-            showSuccessMessage("Order item deleted successfully");
-            viewOrder(currentOrderDetails.id);
-            loadOrders();
-          } else {
-            throw new Error(data.error || "Failed to delete order item");
-          }
-        } catch (error) {
-          console.error("Error deleting order item:", error);
-          showErrorMessage("Failed to delete order item");
         }
+
+        // Render items using the remembered order so rows don't jump after edits
+        const itemsInStableOrder = [...(order.items || [])].sort((a, b) => {
+          const aKey = a.id != null ? String(a.id) : "";
+          const bKey = b.id != null ? String(b.id) : "";
+          return (itemDisplayOrder.get(aKey) ?? 0) - (itemDisplayOrder.get(bKey) ?? 0);
+        });
+
+        itemsInStableOrder.forEach((item, index) => {
+          const row = document.createElement("tr");
+          row.setAttribute("data-item-id", item.id); // handy for future in-place updates
+
+          // we pass 'this' to onclick handlers so increase/decrease can inspect the clicked button
+          row.innerHTML = `
+            <td>${index + 1}</td>
+            <td>${escapeHtml(item.product_name || item.name || "Unknown product")}</td>
+            <td>${formatPrice(item.unit_price != null ? item.unit_price : item.price || 0)}</td>
+            <td>
+              <div class="quantity-control">
+                <button class="quantity-btn negative" onclick="decreaseQuantity(${item.id}, this)" ${((item.quantity || item.qty || 0) <= 1) ? "disabled" : ""}>-</button>
+                <span class="quantity-value">${item.quantity || item.qty || 0}</span>
+                <button class="quantity-btn" onclick="increaseQuantity(${item.id}, this)">+</button>
+              </div>
+            </td>
+            <td>${formatPrice(item.total_price != null ? item.total_price : ((item.quantity || item.qty || 0) * (item.unit_price || item.price || 0)))}</td>
+            <td>
+              <button class="action-btn delete-btn" onclick="deleteOrderItem(${item.id})" title="Delete Item">🗑️</button>
+            </td>
+          `;
+          itemsList.appendChild(row);
+        });
       }
 
-      // UI Functions
-    function populateTable(orders = []) {
-  const tbody = document.getElementById("orderTableBody");
+      // Update totals (defensive fallback)
+      document.getElementById("modalItemTotal").textContent = order.item_count != null ? order.item_count : (order.items || []).length;
+      document.getElementById("modalItemCount").textContent = order.total_quantity != null ? order.total_quantity : (order.items || []).reduce((s, it) => s + (it.quantity || it.qty || 0), 0);
+      document.getElementById("modalBillTotal").textContent = formatPrice(order.total_amount || 0);
+      document.getElementById("modalGrandTotal").textContent = formatPrice(order.total_amount || 0);
 
-  if (orders.length === 0) {
-    tbody.innerHTML =
-      '<tr><td colspan="9" style="text-align: center; padding: 40px; color: #64748b;">No orders found</td></tr>';
-    return;
+      // Show modal
+      const modalEl = document.getElementById("orderHistoryModal");
+      if (modalEl) {
+        modalEl.style.display = "block";
+      }
+    } catch (error) {
+      console.error("Error viewing order:", error);
+      showErrorMessage("Failed to load order details");
+    }
   }
 
-  tbody.innerHTML = "";
-  orders.forEach((order) => {
-    const row = document.createElement("tr");
-    row.setAttribute("data-order-id", order.id); // <-- add this
-    row.innerHTML = `
-      <td>${order.order_number}</td>
-      <td>${formatDate(order.created_at)}</td>
-      <td>${localStorage.getItem("user_id") || "Guest"}</td>
-      <td>${order.customer_name}</td>
-      <td>${order.customer_phone || "-"}</td>
-      <td>${order.total_quantity}</td>
-      <td>${formatPrice(order.total_amount)}</td>
-      <td>
-        <button class="action-btn view-btn" onclick="viewOrder(${order.id})" title="View Details">Show Items</button>
-      </td>
-      <td>
-        <select onchange="updateOrderStatus(${order.id}, this.value)" class="status-badge status-${order.status}">
-          <option value="pending" ${order.status === "pending" ? "selected" : ""}>Pending</option>
-          <option value="completed" ${order.status === "completed" ? "selected" : ""}>Completed</option>
-          <option value="cancelled" ${order.status === "cancelled" ? "selected" : ""}>Sold Out</option>
-        </select>
-      </td>
-      <td>
-        <button class="action-btn delete-btn" onclick="deleteOrder(${order.id})" title="Delete Order">🗑️</button>
-      </td>
-    `;
-    tbody.appendChild(row);
-  });
-}
+  // Increase / Decrease quantity handlers (receive clicked button as second param)
+  function increaseQuantity(itemId, btnEl) {
+    try {
+      const quantityElement = btnEl.parentElement.querySelector(".quantity-value");
+      const currentQuantity = parseInt(quantityElement.textContent || "0", 10);
+      updateOrderItem(itemId, currentQuantity + 1, "increase");
+    } catch (e) {
+      console.error("increaseQuantity error", e);
+    }
+  }
 
-
-      let itemDisplayOrder = new Map(); // To store the initial display order
-
-      async function viewOrder(orderId) {
-        try {
-          const response = await fetch(
-            `${API_BASE}/api/orders/get/?user_id=${userData.user_id}&client_id=${userData.client_id}&order_id=${orderId}`
-          );
-          const data = await response.json();
-
-          if (data.success && data.orders.length > 0) {
-            const order = data.orders.find((item) => item.id === orderId);
-            currentOrderDetails = order;
-
-            // Update modal header
-            document.getElementById("modalOrderId").textContent =
-              order.order_number;
-            document.getElementById("modalCustomerName").textContent =
-              order.customer_name;
-            document.getElementById("modalCustomerPhone").textContent =
-              order.customer_phone || "-";
-            document.getElementById("modalPlace").textContent =
-              order.customer_address || "-";
-            document.getElementById("modalCreatedBy").textContent =
-              userData.user_id;
-            document.getElementById("modalCreatedOn").textContent = formatDate(
-              order.created_at
-            );
-
-            if (order) {
-              const response = await fetch("/customers/", {
-                headers: {
-                  Authorization: `Bearer ${localStorage.getItem(
-                    "access_token"
-                  )}`,
-                },
-              });
-              if (response.ok) customerList = await response.json();
-              else customerList = [];
-
-              const matchedCustomer = customerList.find(
-                (x) =>
-                  x.client_id == localStorage.getItem("client_id") &&
-                  x.name === order.customer_name
-                
-              );
-                
-              localStorage.setItem(
-                "selected_customer",
-                JSON.stringify(matchedCustomer)
-              );
-            }
-
-            // Update items table (stable on-screen order)
-            const itemsList = document.getElementById("modalOrderItemsList");
-            itemsList.innerHTML = "";
-
-            // Capture the initial display order only once per modal open
-            if (itemDisplayOrder.size === 0) {
-  order.items.forEach((it, idx) => itemDisplayOrder.set(it.id, idx));
-}
-
-
-            // Render items using the remembered order so rows don't jump after edits
-            const itemsInStableOrder = [...order.items].sort(
-              (a, b) =>
-                (itemDisplayOrder.get(a.id) ?? 0) -
-                (itemDisplayOrder.get(b.id) ?? 0)
-            );
-
-            itemsInStableOrder.forEach((item, index) => {
-              const row = document.createElement("tr");
-              row.setAttribute("data-item-id", item.id); // handy for future in-place updates
-              row.innerHTML = `
-          <td>${index + 1}</td>
-          <td>${item.product_name}</td>
-          <td>${formatPrice(item.unit_price)}</td>
-          <td>
-            <div class="quantity-control">
-              <button class="quantity-btn negative" onclick="decreaseQuantity(${
-                item.id
-              })" ${item.quantity <= 1 ? "disabled" : ""}>-</button>
-              <span class="quantity-value">${item.quantity}</span>
-              <button class="quantity-btn" onclick="increaseQuantity(${
-                item.id
-              })">+</button>
-            </div>
-          </td>
-          <td>${formatPrice(item.total_price)}</td>
-          <td>
-            <button class="action-btn delete-btn" onclick="deleteOrderItem(${
-              item.id
-            })" title="Delete Item">🗑️</button>
-          </td>
-        `;
-              itemsList.appendChild(row);
-            });
-
-            // Update totals
-            document.getElementById("modalItemTotal").textContent =
-              order.item_count;
-            document.getElementById("modalItemCount").textContent =
-              order.total_quantity;
-            document.getElementById("modalBillTotal").textContent = formatPrice(
-              order.total_amount
-            );
-            document.getElementById("modalGrandTotal").textContent =
-              formatPrice(order.total_amount);
-
-            // Show modal
-            document.getElementById("orderHistoryModal").style.display =
-              "block";
-          } else {
-            throw new Error("Order not found");
-          }
-        } catch (error) {
-          console.error("Error viewing order:", error);
-          showErrorMessage("Failed to load order details");
-        }
+  function decreaseQuantity(itemId, btnEl) {
+    try {
+      const quantityElement = btnEl.parentElement.querySelector(".quantity-value");
+      const currentQuantity = parseInt(quantityElement.textContent || "0", 10);
+      if (currentQuantity > 1) {
+        updateOrderItem(itemId, currentQuantity - 1, "decrease");
       }
-      function increaseQuantity(itemId) {
-        const quantityElement =
-          event.target.parentElement.querySelector(".quantity-value");
-        const currentQuantity = parseInt(quantityElement.textContent);
-        updateOrderItem(itemId, currentQuantity + 1, "increase");
-      }
+    } catch (e) {
+      console.error("decreaseQuantity error", e);
+    }
+  }
 
-      function decreaseQuantity(itemId) {
-        const quantityElement =
-          event.target.parentElement.querySelector(".quantity-value");
-        const currentQuantity = parseInt(quantityElement.textContent);
-        if (currentQuantity > 1) {
-          updateOrderItem(itemId, currentQuantity - 1, "decrease");
-        }
-      }
+  function closeModal() {
+    const modalEl = document.getElementById("orderHistoryModal");
+    if (modalEl) modalEl.style.display = "none";
+    currentOrderDetails = null;
+    // clear captured display order so next modal open can recapture (prevents stale mapping)
+    itemDisplayOrder.clear();
+  }
 
-      function closeModal() {
-        document.getElementById("orderHistoryModal").style.display = "none";
-        currentOrderDetails = null;
-      }
-
-      // Filter Functions
-      function applyDateFilter() {
-  const fromDate = document.getElementById("fromDate").value;
-  const toDate   = document.getElementById("toDate").value;
-
-  currentFilters.fromDate = fromDate;
-  currentFilters.toDate   = toDate;
-  currentFilters.page = 1;
-
-  // If both set, do between; else let loadOrders decide the right mode
-  loadOrders(fromDate && toDate ? "between" : "");
-}
-
-function clearDateFilter() {
-  document.getElementById("fromDate").value = "";
-  document.getElementById("toDate").value = "";
-
-  currentFilters.fromDate = "";
-  currentFilters.toDate   = "";
-  currentFilters.page = 1;
-
-  // Show all
-  loadOrders("");
-}
-
-
-      // Search Functions
-      function setupSearch() {
-  // Search by Order ID / Entry Number
-  document.getElementById("searchByIdInput")
-    .addEventListener("input", function () {
-      const filter = this.value.toLowerCase();
-      const rows = document.querySelectorAll("#orderTableBody tr");
-      rows.forEach((row) => {
-        const orderId = row.querySelector("td:first-child")?.textContent.toLowerCase() || "";
-        row.style.display = orderId.includes(filter) ? "" : "none";
+  // Note: updateOrderItem should be implemented to call your API to update an item qty
+  async function updateOrderItem(itemId, newQty, action) {
+    try {
+      // Example payload — adapt to your API
+      const response = await fetch(`${API_BASE}/api/orders/update-item/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ item_id: itemId, quantity: newQty }),
       });
-    });
+      const data = await response.json();
+      if (data.success) {
+        showSuccessMessage("Item quantity updated");
+        // refresh modal and table
+        if (currentOrderDetails && currentOrderDetails.id) await viewOrder(currentOrderDetails.id);
+        loadOrders();
+      } else {
+        throw new Error(data.error || "Failed to update item");
+      }
+    } catch (e) {
+      console.error("updateOrderItem error", e);
+      showErrorMessage("Failed to update item");
+    }
+  }
 
-  // Search by Customer Name OR Phone Number
-  document.getElementById("searchByNameInput")
-    .addEventListener("input", function () {
-      const filter = this.value.toLowerCase();
-      const rows = document.querySelectorAll("#orderTableBody tr");
-      rows.forEach((row) => {
-        const customerName = row.querySelector("td:nth-child(4)")?.textContent.toLowerCase() || "";
-        const customerPhone = row.querySelector("td:nth-child(5)")?.textContent.toLowerCase() || "";
-        row.style.display = (customerName.includes(filter) || customerPhone.includes(filter)) ? "" : "none";
+  // Filter Functions
+  function applyDateFilter() {
+    const fromDate = document.getElementById("fromDate").value;
+    const toDate = document.getElementById("toDate").value;
+
+    currentFilters.fromDate = fromDate;
+    currentFilters.toDate = toDate;
+    currentFilters.page = 1;
+
+    // If both set, do between; else let loadOrders decide the right mode
+    loadOrders(fromDate && toDate ? "between" : "");
+  }
+
+  function clearDateFilter() {
+    document.getElementById("fromDate").value = "";
+    document.getElementById("toDate").value = "";
+
+    currentFilters.fromDate = "";
+    currentFilters.toDate = "";
+    currentFilters.page = 1;
+
+    // Show all
+    loadOrders("");
+  }
+
+  // Search Functions
+  function setupSearch() {
+    // Search by Order ID / Entry Number
+    const searchByIdInput = document.getElementById("searchByIdInput");
+    if (searchByIdInput) {
+      searchByIdInput.addEventListener("input", function () {
+        const filter = this.value.toLowerCase();
+        const rows = document.querySelectorAll("#orderTableBody tr");
+        rows.forEach((row) => {
+          const orderId = row.querySelector("td:first-child")?.textContent.toLowerCase() || "";
+          row.style.display = orderId.includes(filter) ? "" : "none";
+        });
       });
-    });
-}
+    }
 
+    // Search by Customer Name OR Phone Number
+    const searchByNameInput = document.getElementById("searchByNameInput");
+    if (searchByNameInput) {
+      searchByNameInput.addEventListener("input", function () {
+        const filter = this.value.toLowerCase();
+        const rows = document.querySelectorAll("#orderTableBody tr");
+        rows.forEach((row) => {
+          const customerName = row.querySelector("td:nth-child(4)")?.textContent.toLowerCase() || "";
+          const customerPhone = row.querySelector("td:nth-child(5)")?.textContent.toLowerCase() || "";
+          row.style.display = (customerName.includes(filter) || customerPhone.includes(filter)) ? "" : "none";
+        });
+      });
+    }
+  }
 
-      // Main Functions
-      // Main Functions
+  // Main Functions
+  // REPLACE the existing loadOrders function with this version
 async function loadOrders(method = "") {
   const data = await fetchOrders(currentFilters);
   const list = Array.isArray(data?.orders) ? data.orders : [];
@@ -1686,132 +1748,150 @@ async function loadOrders(method = "") {
   };
 
   const from = currentFilters.fromDate || "";
-  const to   = currentFilters.toDate   || "";
+  const to = currentFilters.toDate || "";
 
   let filtered = list;
 
   // If both dates empty => show ALL
   if (!from && !to) {
     filtered = list;
-  } else if (method === "between" && from && to) {
-    // Range filter (inclusive)
-    filtered = list.filter(x => {
+  } else if (from && to) {
+    // Range filter (inclusive) — apply whenever both are provided
+    filtered = list.filter((x) => {
       const d = toYMD(x.created_at);
       return d >= from && d <= to;
     });
   } else if (from && !to) {
     // Only From set => exact match day
-    filtered = list.filter(x => toYMD(x.created_at) === from);
+    filtered = list.filter((x) => toYMD(x.created_at) === from);
   } else if (!from && to) {
     // Only To set => everything up to that day
-    filtered = list.filter(x => toYMD(x.created_at) <= to);
+    filtered = list.filter((x) => toYMD(x.created_at) <= to);
   }
 
   orderData = filtered;
   populateTable(orderData); // existing renderer
 }
 
-
-      function redirectToAddProducts() {
-        window.location.href = "{% url 'orders' %}";
-      }
-
-      function logout() {
-        if (confirm("Are you sure you want to logout ?")) {
-          window.location.href = "{% url 'login' %}";
-
-          localStorage.removeItem("access_token");
-          localStorage.removeItem("cartData");
-          localStorage.removeItem("client_id");
-          localStorage.removeItem("editing_order");
-          localStorage.removeItem("manual_customers");
-          localStorage.removeItem("selected_customer");
-          localStorage.removeItem("user_id");
-        }
-      }
-
-      // Event Listeners
-      document.addEventListener("DOMContentLoaded", function () {
-        loadOrders();
-        setupSearch();
-
-        // Set today's date as default filter
-        const today = new Date().toISOString().split("T")[0];
-        document.getElementById("fromDate").value = today;
-        document.getElementById("toDate").value = today;
-        currentFilters.fromDate = today;
-        currentFilters.toDate = today;
-        loadOrders();
-
-        const userId = localStorage.getItem("user_id") || "Guest";
-        const clientId = localStorage.getItem("client_id") || "CLIENT_001";
-        document.getElementById(
-          "loginInfo"
-        ).innerText = `ID:${clientId} | USERID: ${userId}`;
-
-        // Date range form handlers
-        const dateRangeForm = document.getElementById("dateRangeForm");
-        if (dateRangeForm) {
-          dateRangeForm.addEventListener("submit", function (e) {
-            e.preventDefault();
-            applyDateFilter();
-          });
-        }
-        const clearDateBtn = document.getElementById("clearDateBtn");
-        if (clearDateBtn) {
-          clearDateBtn.addEventListener("click", function () {
-            clearDateFilter();
-          });
-        }
-
-        // Modal close handlers
-        const modal = document.getElementById("orderHistoryModal");
-        const closeBtn = document.querySelector(".close-modal");
-        if (closeBtn) closeBtn.onclick = closeModal;
-        window.onclick = (e) => {
-          if (e.target === modal) closeModal();
-        };
-        document.addEventListener("keydown", (e) => {
-          if (e.key === "Escape") closeModal();
-        });
-
-        // Add Products button
-        document
-          .getElementById("addProductsFromModal")
-          .addEventListener("click", function () {
-            if (currentOrderDetails) {
-              // Store current order info for editing
-              localStorage.setItem(
-                "editing_order",
-                JSON.stringify(currentOrderDetails)
-              );
-              window.location.href = "{% url 'orders' %}?mode=edit";
-            } else {
-              window.location.href = "{% url 'orders' %}";
-            }
-          });
-      });
-
-      // 
-
-   // In index.html, update the addProductsFromModal click handler
-// In index.html, update the addProductsFromModal click handler
-document.getElementById("addProductsFromModal").addEventListener("click", () => {
-  if (!currentOrderDetails) return;
-
-  // Save order details for editing
-  localStorage.setItem('editing_order', JSON.stringify(currentOrderDetails));
-  
-  // Also save the cart items separately for easier access
-  if (currentOrderDetails.items) {
-    localStorage.setItem('editing_order_cart', JSON.stringify(currentOrderDetails.items));
+  function redirectToAddProducts() {
+    window.location.href = "{% url 'orders' %}";
   }
-  
-  // Navigate to order page in edit mode
-  window.location.href = "{% url 'orders' %}?mode=edit&order_id=" + currentOrderDetails.id;
-});
 
+  function logout() {
+    if (confirm("Are you sure you want to logout ?")) {
+      window.location.href = "{% url 'login' %}";
 
-    </script>
+      localStorage.removeItem("access_token");
+      localStorage.removeItem("cartData");
+      localStorage.removeItem("client_id");
+      localStorage.removeItem("editing_order");
+      localStorage.removeItem("manual_customers");
+      localStorage.removeItem("selected_customer");
+      localStorage.removeItem("user_id");
+    }
+  }
+
+  // Helper: tiny HTML-escape to avoid injecting raw product names into the DOM
+  function escapeHtml(str) {
+    if (str == null) return "";
+    return String(str)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
+  // Event Listeners
+  document.addEventListener("DOMContentLoaded", function () {
+    loadOrders();
+    setupSearch();
+
+    // Set today's date as default filter
+    const today = new Date().toISOString().split("T")[0];
+    const fromEl = document.getElementById("fromDate");
+    const toEl = document.getElementById("toDate");
+    if (fromEl && toEl) {
+     fromEl.value = today;
+toEl.value = today;
+currentFilters.fromDate = today;
+currentFilters.toDate = today;
+loadOrders("between");
+
+    }
+
+    const userId = localStorage.getItem("user_id") || "Guest";
+    const clientId = localStorage.getItem("client_id") || "CLIENT_001";
+    const loginInfoEl = document.getElementById("loginInfo");
+    if (loginInfoEl) loginInfoEl.innerText = `ID:${clientId} | USERID: ${userId}`;
+
+    // Date range form handlers
+    const dateRangeForm = document.getElementById("dateRangeForm");
+    if (dateRangeForm) {
+      dateRangeForm.addEventListener("submit", function (e) {
+        e.preventDefault();
+        applyDateFilter();
+      });
+    }
+    const clearDateBtn = document.getElementById("clearDateBtn");
+    if (clearDateBtn) {
+      clearDateBtn.addEventListener("click", function () {
+        clearDateFilter();
+      });
+    }
+
+    // Modal close handlers
+    const modal = document.getElementById("orderHistoryModal");
+    const closeBtn = document.querySelector(".close-modal");
+    if (closeBtn) closeBtn.onclick = closeModal;
+    window.onclick = (e) => {
+      if (e.target === modal) closeModal();
+    };
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") closeModal();
+    });
+
+    // Add Products button inside modal (only one handler)
+    const addProductsBtn = document.getElementById("addProductsFromModal");
+    if (addProductsBtn) {
+      addProductsBtn.addEventListener("click", function () {
+        if (currentOrderDetails) {
+          // Store current order info for editing
+          localStorage.setItem("editing_order", JSON.stringify(currentOrderDetails));
+
+          // Save cart items for easier access on the edit page
+          if (currentOrderDetails.items) {
+            // Normalize items slightly (optional)
+            const cart = (currentOrderDetails.items || []).map((it) => ({
+              id: it.id,
+              product_code: it.product_code || it.sku || it.product_id || "",
+              product_name: it.product_name || it.name || "",
+              quantity: it.quantity || it.qty || 0,
+              unit_price: it.unit_price != null ? it.unit_price : it.price || 0,
+            }));
+            localStorage.setItem("editing_order_cart", JSON.stringify(cart));
+          }
+
+          // navigate to edit page (include order_id so the page can load the same order if needed)
+          window.location.href = "{% url 'orders' %}?mode=edit&order_id=" + encodeURIComponent(currentOrderDetails.id);
+        } else {
+          window.location.href = "{% url 'orders' %}";
+        }
+      });
+    }
+  });
+
+  // In some contexts you might call this from other script blocks — keep it safe to call multiple times
+  if (typeof window !== "undefined") {
+    window.viewOrder = viewOrder;
+    window.deleteOrder = deleteOrder;
+    window.deleteOrderItem = deleteOrderItem;
+    window.updateOrderStatus = updateOrderStatus;
+    window.increaseQuantity = increaseQuantity;
+    window.decreaseQuantity = decreaseQuantity;
+    window.updateOrderItem = updateOrderItem;
+  }
+</script>
+
   </body>
 </html>
