@@ -1137,7 +1137,13 @@ function populateCustomerDropdown(customers) {
   if (!container) return;
   container.innerHTML = '';
 
-  if (customers.length === 0) { container.innerHTML = '<div class="no-results">No customers found</div>'; return; }
+  if (customers.length === 0) {
+    container.innerHTML = '<div class="no-results">No customers found</div>';
+    return;
+  }
+
+  // ✅ Sort customers by name alphabetically
+  customers.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
 
   customers.forEach(customer => {
     const item = document.createElement('div');
@@ -1147,11 +1153,15 @@ function populateCustomerDropdown(customers) {
     item.innerHTML = `<div class="customer-name">${customer.name}</div>`;
     item.addEventListener('click', () => selectCustomer(customer));
     item.addEventListener('keydown', e => {
-      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectCustomer(customer); }
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        selectCustomer(customer);
+      }
     });
     container.appendChild(item);
   });
 }
+
 
 async function fetchCustomers() {
   try {
