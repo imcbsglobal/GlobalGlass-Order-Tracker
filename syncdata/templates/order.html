@@ -860,6 +860,7 @@ async function updateCartBadge() {
   }
 }
 
+// Replace the updateProductHighlights function with this corrected version
 async function updateProductHighlights() {
   try {
     const customer = JSON.parse(localStorage.getItem('selected_customer') || '{}');
@@ -879,17 +880,33 @@ async function updateProductHighlights() {
       });
     }
 
+    // Check URL parameters to see if we're in edit mode
+    const urlParams = new URLSearchParams(window.location.search);
+    const isEditMode = urlParams.get('mode') === 'edit';
+    
+    // Only use editing order data if we're explicitly in edit mode
+    if (isEditMode) {
+      const editingOrder = JSON.parse(localStorage.getItem('editing_order') || 'null');
+      const editingOrderCart = JSON.parse(localStorage.getItem('editing_order_cart') || '[]');
+      
+      // If editing an order, use the items from that order
+      if (editingOrder && editingOrderCart.length > 0) {
+        editingOrderCart.forEach(item => {
+          existingCart[item.product_code] = item.quantity;
+        });
+      }
+    }
+
     products.forEach(p => {
       if (!p.code) return;
 
-      // server quantity
+      // Get quantity from existing cart or editing order (if in edit mode)
       const qty = (existingCart[p.code] || 0);
 
-      // toggle highlight
+      // Update UI elements
       const row = $(`product-${p.code}`);
       if (row) row.classList.toggle('in-cart', qty > 0);
 
-      // "In cart: N"
       const inCartEl = $(`in-cart-${p.code}`);
       if (inCartEl) {
         if (qty > 0) {
@@ -900,15 +917,13 @@ async function updateProductHighlights() {
         }
       }
 
-      // keep a copy of server-side qty
+      // Update internal state
       serverCartQuantities[p.code] = qty;
-
-      // mirror into the quantity control
       selectedQuantities[p.code] = qty;
+      
       const qtyEl = $(`qty-${p.code}`);
       if (qtyEl) qtyEl.textContent = qty;
 
-      // keep buttons consistent
       updateQuantityButtons?.(p.code);
       updateAddToCartButton?.(p.code);
     });

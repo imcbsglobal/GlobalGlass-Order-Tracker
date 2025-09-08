@@ -1259,6 +1259,11 @@ w
     </div>
 
     <script>
+
+
+
+
+
       // Global variables
       let orderData = [];
       let currentOrderDetails = null;
@@ -1367,109 +1372,43 @@ w
       }
 
       async function deleteOrder(orderId) {
-        if (!confirm("Are you sure you want to delete this order?")) return;
+  if (!confirm("Are you sure you want to delete this order?")) return;
 
-        try {
-          const response = await fetch(`${API_BASE}/api/orders/delete/`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              order_id: orderId,
-            }),
-          });
+  try {
+    const response = await fetch(`${API_BASE}/api/orders/delete/`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ order_id: orderId }),
+    });
 
-          const data = await response.json();
-          if (data.success) {
-            showSuccessMessage("Order deleted successfully");
-            loadOrders("between");
-          } else {
-            throw new Error(data.error || "Failed to delete order");
-          }
-        } catch (error) {
-          console.error("Error deleting order:", error);
-          showErrorMessage("Failed to delete order");
-        }
+    const data = await response.json();
+    if (data.success) {
+      showSuccessMessage("Order deleted successfully");
+
+      // 1) update local cache
+      orderData = (orderData || []).filter(o => o.id !== orderId);
+
+      // 2) remove just that row from the DOM
+      const row = document.querySelector(
+        `#orderTableBody tr[data-order-id="${orderId}"]`
+      );
+      if (row) row.remove();
+
+      // 3) if nothing left after filters, show empty-state row
+      const tbody = document.getElementById("orderTableBody");
+      if (!tbody.querySelector("tr")) {
+        tbody.innerHTML =
+          '<tr><td colspan="9" style="text-align: center; padding: 40px; color: #64748b;">No orders found</td></tr>';
       }
+    } else {
+      throw new Error(data.error || "Failed to delete order");
+    }
+  } catch (error) {
+    console.error("Error deleting order:", error);
+    showErrorMessage("Failed to delete order");
+  }
+}
 
-      function updateQuantityDisplay(itemId, newQuantity, newTotalPrice) {
-        const row = document.querySelector(`tr[data-item-id="${itemId}"]`);
-        if (row) {
-          const quantityElement = row.querySelector(".quantity-value");
-          const totalElement = row.querySelector("td:nth-child(5)");
-          quantityElement.textContent = newQuantity;
-          totalElement.textContent = formatPrice(newTotalPrice);
-        }
-      }
-
-      async function updateOrderItem(itemId, quantity, movement) {
-        try {
-          const response = await fetch(`${API_BASE}/api/orders/update-item/`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              item_id: itemId,
-              quantity: quantity,
-            }),
-          });
-
-          const data = await response.json();
-
-          if (data.success) {
-            showSuccessMessage("Order item updated successfully");
-
-            let value =
-              parseInt(
-                document.getElementById("modalItemCount").textContent,
-                10
-              ) || 0;
-
-            if (movement == "increase") {
-              document.getElementById("modalItemCount").textContent = value + 1;
-            } else if (movement == "decrease") {
-              document.getElementById("modalItemCount").textContent = value - 1;
-            }
-
-            document.getElementById("modalBillTotal").textContent = formatPrice(
-              data.totalAmount
-            );
-            document.getElementById("modalGrandTotal").textContent =
-              formatPrice(data.totalAmount);
-
-            // Update the display without re-rendering the entire table
-            const row = document.querySelector(`tr[data-item-id="${itemId}"]`);
-            if (row) {
-              const quantityElement = row.querySelector(".quantity-value");
-              const totalElement = row.querySelector("td:nth-child(5)");
-              const unitPrice = parseFloat(
-                row
-                  .querySelector("td:nth-child(3)")
-                  .textContent.replace("₹", "")
-                  .trim()
-              );
-              const totalPrice = unitPrice * quantity;
-
-              if (quantity > 1) {
-                row.querySelector(".quantity-btn").disabled = false;
-                // row.querySelector(".quantity-btn negative").styles.remove('disabled');
-              }
-              quantityElement.textContent = quantity;
-              totalElement.textContent = formatPrice(totalPrice);
-            }
-
-            // Refresh the main index table so totals update immediately
-            loadOrders();
-          } else {
-            throw new Error(data.error || "Failed to update order item");
-          }
-        } catch (error) {
-          console.error("Error updating order item:", error);
-          showErrorMessage("Failed to update order item");
-        }
-      }
 
       async function deleteOrderItem(itemId) {
         if (!confirm("Are you sure you want to delete this item?")) return;
@@ -1500,57 +1439,45 @@ w
       }
 
       // UI Functions
-      function populateTable(orders = []) {
-        const tbody = document.getElementById("orderTableBody");
-        // const stats = document.getElementById("tableStats");
+    function populateTable(orders = []) {
+  const tbody = document.getElementById("orderTableBody");
 
-        if (orders.length === 0) {
-          tbody.innerHTML =
-            '<tr><td colspan="9" style="text-align: center; padding: 40px; color: #64748b;">No orders found</td></tr>';
-          // stats.textContent = "No orders";
-          return;
-        }
+  if (orders.length === 0) {
+    tbody.innerHTML =
+      '<tr><td colspan="9" style="text-align: center; padding: 40px; color: #64748b;">No orders found</td></tr>';
+    return;
+  }
 
-        tbody.innerHTML = "";
-        orders.forEach((order, index) => {
-          const row = document.createElement("tr");
-          row.innerHTML = `
-                    <td>${order.order_number}</td>
-                    <td>${formatDate(order.created_at)}</td>
-                    <td>${localStorage.getItem("user_id") || "Guest"}</td>
-                    <td>${order.customer_name}</td>
-                    <td>${order.customer_phone || "-"}</td>
-                    <td>${order.total_quantity}</td>
-                    <td>${formatPrice(order.total_amount)}</td>
-                    <td>
-                      <button class="action-btn view-btn" 
-                        onclick="viewOrder(${order.id})" 
-                        title="View Details"
-                      >Show Items</button>
-                    </td>
-                    <td>
-                      <select onchange="updateOrderStatus(${order.id}, this.value)" class="status-badge status-${order.status}">
-  <option value="pending" ${order.status === "pending" ? "selected" : ""}>Pending</option>
-  <option value="completed" ${order.status === "completed" ? "selected" : ""}>Completed</option>
-  <option value="cancelled" ${order.status === "cancelled" ? "selected" : ""}>Sold Out</option>
-</select>
+  tbody.innerHTML = "";
+  orders.forEach((order) => {
+    const row = document.createElement("tr");
+    row.setAttribute("data-order-id", order.id); // <-- add this
+    row.innerHTML = `
+      <td>${order.order_number}</td>
+      <td>${formatDate(order.created_at)}</td>
+      <td>${localStorage.getItem("user_id") || "Guest"}</td>
+      <td>${order.customer_name}</td>
+      <td>${order.customer_phone || "-"}</td>
+      <td>${order.total_quantity}</td>
+      <td>${formatPrice(order.total_amount)}</td>
+      <td>
+        <button class="action-btn view-btn" onclick="viewOrder(${order.id})" title="View Details">Show Items</button>
+      </td>
+      <td>
+        <select onchange="updateOrderStatus(${order.id}, this.value)" class="status-badge status-${order.status}">
+          <option value="pending" ${order.status === "pending" ? "selected" : ""}>Pending</option>
+          <option value="completed" ${order.status === "completed" ? "selected" : ""}>Completed</option>
+          <option value="cancelled" ${order.status === "cancelled" ? "selected" : ""}>Sold Out</option>
+        </select>
+      </td>
+      <td>
+        <button class="action-btn delete-btn" onclick="deleteOrder(${order.id})" title="Delete Order">🗑️</button>
+      </td>
+    `;
+    tbody.appendChild(row);
+  });
+}
 
-                    </td>
-                    
-                    
-
-                    <td>
-                        
-                        <button class="action-btn delete-btn" onclick="deleteOrder(${
-                          order.id
-                        })" title="Delete Order">🗑️</button>
-                    </td>
-                `;
-          tbody.appendChild(row);
-        });
-
-        // stats.textContent = `${orders.length} orders`;
-      }
 
       let itemDisplayOrder = new Map(); // To store the initial display order
 
@@ -1610,10 +1537,9 @@ w
 
             // Capture the initial display order only once per modal open
             if (itemDisplayOrder.size === 0) {
-              order.items.forEach((it, idx) =>
-                itemDisplayOrder.set(it.id, idx)
-              );
-            }
+  order.items.forEach((it, idx) => itemDisplayOrder.set(it.id, idx));
+}
+
 
             // Render items using the remembered order so rows don't jump after edits
             const itemsInStableOrder = [...order.items].sort(
@@ -1868,25 +1794,21 @@ async function loadOrders(method = "") {
 
       // 
 
-   document.getElementById("addProductsFromModal").addEventListener("click", () => {
+   // In index.html, update the addProductsFromModal click handler
+// In index.html, update the addProductsFromModal click handler
+document.getElementById("addProductsFromModal").addEventListener("click", () => {
   if (!currentOrderDetails) return;
 
-  // make sure order.html knows which order we’re editing
-  const ord = currentOrderDetails;
-
-  // save customer (for header on order.html)
-  localStorage.setItem('selected_customer', JSON.stringify({
-    name:  ord.customer_name,
-    phone: ord.customer_phone || '',
-    address: ord.customer_address || ord.customer_place || ''
-  }));
-
-  // optional: quick preload before API returns on order.html
-  localStorage.setItem("editing_order", JSON.stringify(ord));
-  localStorage.setItem("editing_order_cart", JSON.stringify(ord.items || []));
-
-  // go to order page IN EDIT MODE with the order_id
-  window.location.href = "{% url 'orders' %}?mode=edit&order_id=" + ord.id;
+  // Save order details for editing
+  localStorage.setItem('editing_order', JSON.stringify(currentOrderDetails));
+  
+  // Also save the cart items separately for easier access
+  if (currentOrderDetails.items) {
+    localStorage.setItem('editing_order_cart', JSON.stringify(currentOrderDetails.items));
+  }
+  
+  // Navigate to order page in edit mode
+  window.location.href = "{% url 'orders' %}?mode=edit&order_id=" + currentOrderDetails.id;
 });
 
 
