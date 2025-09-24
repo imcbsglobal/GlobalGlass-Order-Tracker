@@ -1,0 +1,36 @@
+<!-- ... existing code ... -->
+<div id="welcome-message">
+    <table>
+        <tr>
+            <th>Welcome</th>
+            <td><span id="username-display">Guest | CLIENT_001</span></td>
+        </tr>
+    </table>
+</div>
+<script>
+    function updateUsernameDisplay() {
+        try {
+            console.log('LocalStorage content:', JSON.stringify(localStorage, null, 2));
+            const username = localStorage.getItem('username') || 
+                            sessionStorage.getItem('username') || 
+                            'Guest | CLIENT_001';
+            
+            console.log('Resolved username:', username);
+            const displayElement = document.getElementById('username-display');
+            
+            if (displayElement) {
+                displayElement.textContent = username;
+                console.log('Successfully updated username display');
+            } else {
+                console.error('Could not find element with ID "username-display"');
+            }
+        } catch (error) {
+            console.error('Error updating username display:', error);
+        }
+    }
+
+    // Run immediately and also when DOM is fully loaded
+    updateUsernameDisplay();
+    document.addEventListener('DOMContentLoaded', updateUsernameDisplay);
+    window.addEventListener('storage', updateUsernameDisplay);
+</script>

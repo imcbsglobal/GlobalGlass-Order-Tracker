@@ -1,0 +1,50 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+*.egg-info/
+*.log
+
+# Virtualenv
+venv/
+ENV/
+env/
+.venv/
+
+# Django/Migrations
+*/migrations/
+db.sqlite3
+*.sqlite3
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# PyInstaller
+*.spec
+dist/
+build/
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+
+# Environment variables
+.env
+.env.*
+
+# Coverage/Test/Reports
+.coverage
+htmlcov/
+.tox/
+.nosetests
+.pytest_cache/
+coverage.xml
+
+# Static & media (optional - if generated at runtime)
+staticfiles/
+media/
+
+# Local config
+settings_local.py
