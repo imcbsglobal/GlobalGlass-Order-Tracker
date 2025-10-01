@@ -1836,6 +1836,9 @@ function toYMDLocal(s) {
       });
 
       if (filters.status) params.append("status", filters.status);
+      // Pass date filters to server when provided for consistent filtering
+      if (filters.fromDate) params.append("from_date", filters.fromDate);
+      if (filters.toDate) params.append("to_date", filters.toDate);
 
       const response = await fetch(`${API_BASE}/api/orders/get/?${params.toString()}`);
       const data = await response.json();
@@ -2377,20 +2380,20 @@ async function loadOrders(method = "") {
 
   // Event Listeners
   document.addEventListener("DOMContentLoaded", function () {
-    loadOrders();
     setupSearch();
 
-   // Set today's date as default filter (IST)
-const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
-const fromEl = document.getElementById("fromDate");
-const toEl = document.getElementById("toDate");
-if (fromEl && toEl) {
-  fromEl.value = today;
-  toEl.value = today;
-  currentFilters.fromDate = today;
-  currentFilters.toDate = today;
-  loadOrders("between");
-}
+    // Default to show only today's orders (IST)
+    const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+    const fromEl = document.getElementById("fromDate");
+    const toEl = document.getElementById("toDate");
+    if (fromEl && toEl) {
+      fromEl.value = today;
+      toEl.value = today;
+    }
+    currentFilters.fromDate = today;
+    currentFilters.toDate = today;
+    currentFilters.page = 1;
+    loadOrders("between");
 
 
     const userId = localStorage.getItem("user_id") || "Guest";

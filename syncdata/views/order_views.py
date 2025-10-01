@@ -343,20 +343,34 @@ def get_orders(request):
         user_id = request.GET.get('user_id')
         client_id = request.GET.get('client_id')
         status = request.GET.get('status', '')
+        from_date = request.GET.get('from_date')  # YYYY-MM-DD
+        to_date = request.GET.get('to_date')      # YYYY-MM-DD
+        order_id = request.GET.get('order_id')
         page = int(request.GET.get('page', 1))
         per_page = int(request.GET.get('per_page', 20))
         
         # Build query
         orders = Order.objects.filter(user_id=user_id, client_id=client_id)
+
+        if order_id:
+            orders = orders.filter(id=order_id)
         
         if status:
             orders = orders.filter(status=status)
+
+        if from_date:
+            orders = orders.filter(created_at__date__gte=from_date)
+        if to_date:
+            orders = orders.filter(created_at__date__lte=to_date)
             
         orders = orders.order_by('-created_at')
         
-        # Paginate
-        paginator = Paginator(orders, per_page)
-        page_obj = paginator.get_page(page)
+        # Paginate unless requesting a specific order_id
+        if order_id:
+            page_obj = list(orders)
+        else:
+            paginator = Paginator(orders, per_page)
+            page_obj = paginator.get_page(page)
         
         # Prepare response data
         orders_data = []
@@ -387,17 +401,24 @@ def get_orders(request):
                 'total_quantity': sum(item.quantity for item in order.items.all())
             })
         
-        return JsonResponse({
-            'success': True,
-            'orders': orders_data,
-            'pagination': {
-                'current_page': page_obj.number,
-                'total_pages': page_obj.paginator.num_pages,
-                'total_count': page_obj.paginator.count,
-                'has_next': page_obj.has_next(),
-                'has_previous': page_obj.has_previous()
-            }
-        })
+        if order_id:
+            # When fetching a specific order, skip pagination metadata
+            return JsonResponse({
+                'success': True,
+                'orders': orders_data,
+            })
+        else:
+            return JsonResponse({
+                'success': True,
+                'orders': orders_data,
+                'pagination': {
+                    'current_page': page_obj.number,
+                    'total_pages': page_obj.paginator.num_pages,
+                    'total_count': page_obj.paginator.count,
+                    'has_next': page_obj.has_next(),
+                    'has_previous': page_obj.has_previous()
+                }
+            })
         
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
