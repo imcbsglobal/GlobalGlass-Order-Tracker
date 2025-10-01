@@ -1446,7 +1446,7 @@
                   >
                     <div class="date-range-inputs">
                       <div class="date-range-input">
-                        <label for="fromDate">From Date</label>
+                        <label for="fromDate">From Date (12:00 AM)</label>
                         <input
                           type="date"
                           id="fromDate"
@@ -1455,7 +1455,7 @@
                         />
                       </div>
                       <div class="date-range-input">
-                        <label for="toDate">To Date</label>
+                        <label for="toDate">To Date (11:59 PM)</label>
                         <input
                           type="date"
                           id="toDate"
@@ -1631,7 +1631,8 @@
               </thead>
               <tbody id="orderTableBody">
                 <tr>
-                  <td colspan="9" class="loading">Loading orders...</td>
+                <td colspan="10" class="loading">Loading orders...</td>
+
                 </tr>
               </tbody>
             </table>
@@ -1774,12 +1775,38 @@
     return "₹" + Number(price).toFixed(2);
   }
 
-  function formatDate(dateString) {
-    if (!dateString) return "-";
-    const date = new Date(dateString);
-    if (isNaN(date.getTime())) return dateString; // fallback if already formatted
-    return date.toLocaleDateString("en-GB");
-  }
+function parseServerDate(s) {
+  if (!s) return null;
+  // supports "YYYY-MM-DD HH:mm:ss" (treat as UTC) and ISO 8601
+  if (s.includes('T')) return new Date(s);                // ISO with offset -> native parse
+  const d = new Date(s.replace(' ', 'T') + 'Z');          // naive -> mark as UTC
+  return isNaN(d) ? null : d;
+}
+
+function formatDateTime(s) {
+  const d = parseServerDate(s);
+  return d
+    ? d.toLocaleString("en-US", {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: true,   // <-- this makes it AM/PM
+      })
+    : (s || "-");
+}
+
+
+function toYMDLocal(s) {
+  const d = parseServerDate(s);
+  if (!d) return '';
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;                               // local YYYY-MM-DD
+}
 
   function showSuccessMessage(message) {
     const successDiv = document.createElement("div");
@@ -1805,7 +1832,7 @@
         user_id: userData.user_id,
         client_id: userData.client_id,
         page: filters.page || 1,
-        per_page: 20,
+        per_page: 500,
       });
 
       if (filters.status) params.append("status", filters.status);
@@ -1875,8 +1902,9 @@
         // 3) if nothing left after filters, show empty-state row
         const tbody = document.getElementById("orderTableBody");
         if (!tbody.querySelector("tr")) {
-          tbody.innerHTML =
-            '<tr><td colspan="9" style="text-align: center; padding: 40px; color: #64748b;">No orders found</td></tr>';
+         tbody.innerHTML =
+  '<tr><td colspan="10" style="text-align: center; padding: 40px; color: #64748b;">No orders found</td></tr>';
+
         }
       } else {
         throw new Error(data.error || "Failed to delete order");
@@ -1935,7 +1963,7 @@
       row.setAttribute("data-order-id", order.id); // <-- add this
       row.innerHTML = `
         <td>${order.order_number}</td>
-        <td>${formatDate(order.created_at)}</td>
+        <td>${formatDateTime(order.created_at)}</td>
         <td>${localStorage.getItem("user_id") || "Guest"}</td>
         <td>${order.customer_name || "-"}</td>
         <td>${order.customer_phone || "-"}</td>
@@ -1983,7 +2011,7 @@
       document.getElementById("modalCustomerPhone").textContent = order.customer_phone || "-";
       document.getElementById("modalPlace").textContent = order.customer_address || "-";
       document.getElementById("modalCreatedBy").textContent = userData.user_id || "-";
-      document.getElementById("modalCreatedOn").textContent = formatDate(order.created_at);
+      document.getElementById("modalCreatedOn").textContent = formatDateTime(order.created_at);
 
       // Try to fetch server customers and match; fallback to manual customer object if no match
       let customerList = [];
@@ -2290,12 +2318,7 @@ async function loadOrders(method = "") {
   const list = Array.isArray(data?.orders) ? data.orders : [];
 
   // Normalize API date to YYYY-MM-DD once
-// replaces split(' ')[0]
-const toYMD = (created_at) => {
-  if (!created_at) return "";
-  return String(created_at).slice(0, 10); // handles "YYYY-MM-DD", "YYYY-MM-DD HH:MM:SS", "YYYY-MM-DDTHH:MM:SSZ"
-};
-
+  const toYMD = (created_at) => (created_at ? toYMDLocal(created_at) : "");
 
   const from = currentFilters.fromDate || "";
   const to = currentFilters.toDate || "";
@@ -2306,7 +2329,7 @@ const toYMD = (created_at) => {
   if (!from && !to) {
     filtered = list;
   } else if (from && to) {
-    // Range filter (inclusive) — apply whenever both are provided
+    // Range filter (inclusive)
     filtered = list.filter((x) => {
       const d = toYMD(x.created_at);
       return d >= from && d <= to;
@@ -2357,18 +2380,18 @@ const toYMD = (created_at) => {
     loadOrders();
     setupSearch();
 
-    // Set today's date as default filter
-    const today = new Date().toISOString().split("T")[0];
-    const fromEl = document.getElementById("fromDate");
-    const toEl = document.getElementById("toDate");
-    if (fromEl && toEl) {
-     fromEl.value = today;
-toEl.value = today;
-currentFilters.fromDate = today;
-currentFilters.toDate = today;
-loadOrders("between");
+   // Set today's date as default filter (IST)
+const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+const fromEl = document.getElementById("fromDate");
+const toEl = document.getElementById("toDate");
+if (fromEl && toEl) {
+  fromEl.value = today;
+  toEl.value = today;
+  currentFilters.fromDate = today;
+  currentFilters.toDate = today;
+  loadOrders("between");
+}
 
-    }
 
     const userId = localStorage.getItem("user_id") || "Guest";
     const clientId = localStorage.getItem("client_id") || "CLIENT_001";

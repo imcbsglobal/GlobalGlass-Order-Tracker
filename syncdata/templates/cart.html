@@ -942,7 +942,45 @@
         window.history.back()
     }
 //
+function getAuth() {
+    return {
+      user_id: localStorage.getItem('user_id'),
+      client_id: localStorage.getItem('client_id'),
+    };
+  }
+  function getSelectedCustomer() {
+    try {
+      const obj = JSON.parse(localStorage.getItem('selected_customer') || '{}');
+      return { name: obj.name || 'Guest', phone: obj.phone || '', address: obj.address || '' };
+    } catch { return { name: 'Guest', phone: '', address: '' }; }
+  }
 
+  async function placeOrder() {
+    const { user_id, client_id } = getAuth();
+    const { name, phone, address } = getSelectedCustomer();
+    if (!user_id || !client_id) { alert('Missing user_id/client_id'); return; }
+
+    const res = await fetch('/api/orders/place/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        user_id, client_id,
+        customer_name: name,
+        customer_phone: phone,
+        customer_address: address
+      })
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) { alert(data.error || 'Failed to place order'); return; }
+
+    showToast('Order placed successfully!');
+    setTimeout(() => { window.location.href = '/index/'; }, 600);
+  }
+
+  function showToast(msg){ const el=document.createElement('div'); el.className='success-message'; el.textContent=msg; document.body.appendChild(el); setTimeout(()=>el.remove(),1500); }
+  document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('placeOrderBtn')?.addEventListener('click', placeOrder);
+  });
 
  
 </script>

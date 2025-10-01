@@ -285,7 +285,7 @@ def place_order(request):
 
             if not order:
                 # Create new order if none exists
-                order_number = f"ORD-{datetime.now().strftime('%Y%m%d')}-{uuid.uuid4().hex[:8].upper()}"
+                order_number = f"ORD-{timezone.localdate().strftime('%Y%m%d')}-{uuid.uuid4().hex[:8].upper()}"
                 total_amount = sum(item.unit_price * item.quantity for item in cart.items.all())
                 order = Order.objects.create(
                     order_number=order_number,
@@ -380,8 +380,8 @@ def get_orders(request):
                 'customer_address': order.customer_address,
                 'total_amount': float(order.total_amount),
                 'status': order.status,
-                'created_at': order.created_at.strftime('%Y-%m-%d %H:%M:%S'),
-                'updated_at': order.updated_at.strftime('%Y-%m-%d %H:%M:%S'),
+                'created_at': timezone.localtime(order.created_at).isoformat(),
+                'updated_at': timezone.localtime(order.updated_at).isoformat(),
                 'items': order_items,
                 'item_count': len(order_items),
                 'total_quantity': sum(item.quantity for item in order.items.all())
