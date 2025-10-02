@@ -525,4 +525,3 @@ def delete_order_item(request):
         return JsonResponse({'error': 'Order item not found'}, status=404)
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
-

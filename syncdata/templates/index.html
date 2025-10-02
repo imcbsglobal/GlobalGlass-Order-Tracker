@@ -1826,34 +1826,74 @@ function toYMDLocal(s) {
   }
 
   // API Functions
-  async function fetchOrders(filters = {}) {
-    try {
-      const params = new URLSearchParams({
-        user_id: userData.user_id,
-        client_id: userData.client_id,
-        page: filters.page || 1,
-        per_page: 500,
-      });
+  // Fetch orders from the API with server-side date filtering (recommended)
+// Fetch orders from the API with server-side date filtering (recommended)
+async function fetchOrders(filters = {}) {
+  const {
+    page = 1,
+    perPage = 500,
+    status,
+    fromDate,   // 'YYYY-MM-DD'
+    toDate,     // 'YYYY-MM-DD'
+  } = filters || {};
 
-      if (filters.status) params.append("status", filters.status);
-      // Pass date filters to server when provided for consistent filtering
-      if (filters.fromDate) params.append("from_date", filters.fromDate);
-      if (filters.toDate) params.append("to_date", filters.toDate);
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15000);
 
-      const response = await fetch(`${API_BASE}/api/orders/get/?${params.toString()}`);
-      const data = await response.json();
+  try {
+    const params = new URLSearchParams({
+      user_id: String(userData.user_id || ""),
+      client_id: String(userData.client_id || ""),
+      page: String(page),
+      per_page: String(perPage),
+      _: Date.now().toString(),       // cache-buster
+    });
 
-      if (data.success) {
-        return data;
-      } else {
-        throw new Error(data.error || "Failed to fetch orders");
-      }
-    } catch (error) {
-      console.error("Error fetching orders:", error);
-      showErrorMessage("Failed to load orders");
-      return { orders: [], pagination: {} };
+    if (status)   params.append("status", status);
+    if (fromDate) params.append("from_date", fromDate);
+    if (toDate)   params.append("to_date", toDate);
+
+    const url = `${API_BASE}/api/orders/get/?${params.toString()}`;
+
+    const response = await fetch(url, {
+      method: "GET",
+      headers: { "Accept": "application/json" },
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      const text = await response.text().catch(() => "");
+      throw new Error(`HTTP ${response.status} ${response.statusText}` + (text ? ` — ${text.slice(0,180)}` : ""));
     }
+
+    const data = await response.json();
+    if (!data || data.success !== true) {
+      throw new Error((data && (data.error || data.message)) || "Failed to fetch orders");
+    }
+
+    const orders = Array.isArray(data.orders) ? data.orders : [];
+    const pagination = {
+      current_page: Number(data.pagination?.current_page || page) || 1,
+      per_page: Number(data.pagination?.per_page || perPage) || perPage,
+      total_pages: Number(data.pagination?.total_pages || 1) || 1,
+      total_items: Number(data.pagination?.total_items || orders.length) || orders.length,
+    };
+
+    return { success: true, orders, pagination };
+  } catch (error) {
+    console.error("Error fetching orders:", error);
+    const msg = error?.name === "AbortError"
+      ? "Request timed out while loading orders"
+      : (error?.message || "Failed to load orders");
+    if (typeof showErrorMessage === "function") showErrorMessage(msg);
+
+    return { success: false, orders: [], pagination: { current_page: 1, per_page: 0, total_pages: 1, total_items: 0 } };
+  } finally {
+    clearTimeout(timeoutId);
   }
+}
+
+
 
   async function updateOrderStatus(orderId, newStatus) {
     try {
