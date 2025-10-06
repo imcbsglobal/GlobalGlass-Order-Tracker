@@ -2006,7 +2006,8 @@ async function fetchOrders(filters = {}) {
       row.setAttribute("data-order-id", order.id); // <-- add this
       row.innerHTML = `
         <td>${order.order_number}</td>
-        <td>${formatDateTime(order.created_at)}</td>
+        <td>${formatDateTime(order.updated_at || order.created_at)}</td>
+
         <td>${localStorage.getItem("user_id") || "Guest"}</td>
         <td>${order.customer_name || "-"}</td>
         <td>${order.customer_phone || "-"}</td>
@@ -2356,38 +2357,44 @@ itemsInStableOrder.forEach((item, index) => {
 
   // Main Functions
   // REPLACE the existing loadOrders function with this version
-async function loadOrders(method = "") {
+// REPLACE the existing loadOrders function with this version
+async function loadOrders() {
+  // 1) fetch from API using your currentFilters (already set on page load & date form)
   const data = await fetchOrders(currentFilters);
   const list = Array.isArray(data?.orders) ? data.orders : [];
 
-  // Normalize API date to YYYY-MM-DD once
-  const toYMD = (created_at) => (created_at ? toYMDLocal(created_at) : "");
+  // 2) helper: normalize any date string -> local YYYY-MM-DD
+  const toYMD = (dt) => (dt ? toYMDLocal(dt) : "");
 
+  // 3) read current range (YYYY-MM-DD)
   const from = currentFilters.fromDate || "";
-  const to = currentFilters.toDate || "";
+  const to   = currentFilters.toDate   || "";
 
+  // 4) apply client-side date filter **based on updated_at**
   let filtered = list;
 
-  // If both dates empty => show ALL
   if (!from && !to) {
+    // no range -> show everything returned by API
     filtered = list;
   } else if (from && to) {
-    // Range filter (inclusive)
+    // inclusive range
     filtered = list.filter((x) => {
-      const d = toYMD(x.created_at);
+      const d = toYMD(x.updated_at || x.created_at);
       return d >= from && d <= to;
     });
   } else if (from && !to) {
-    // Only From set => exact match day
-    filtered = list.filter((x) => toYMD(x.created_at) === from);
+    // only a single day selected (from)
+    filtered = list.filter((x) => toYMD(x.updated_at || x.created_at) === from);
   } else if (!from && to) {
-    // Only To set => everything up to that day
-    filtered = list.filter((x) => toYMD(x.created_at) <= to);
+    // everything up to 'to'
+    filtered = list.filter((x) => toYMD(x.updated_at || x.created_at) <= to);
   }
 
+  // 5) update table
   orderData = filtered;
-  populateTable(orderData); // existing renderer
+  populateTable(orderData);
 }
+
 
   function redirectToAddProducts() {
     window.location.href = "{% url 'orders' %}";

@@ -359,11 +359,10 @@ def get_orders(request):
             orders = orders.filter(status=status)
 
         if from_date:
-            orders = orders.filter(created_at__date__gte=from_date)
+            orders = orders.filter(updated_at__date__gte=from_date)
         if to_date:
-            orders = orders.filter(created_at__date__lte=to_date)
-            
-        orders = orders.order_by('-created_at')
+            orders = orders.filter(updated_at__date__lte=to_date)
+        orders = orders.order_by('-updated_at')
         
         # Paginate unless requesting a specific order_id
         if order_id:
