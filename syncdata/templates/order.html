@@ -387,6 +387,77 @@ body {
   font-size: 25px;   /* increase size */
   color: var(--primary-color);  /* keep your theme color */
 }
+/* ======= PRICE SELECTOR: inline design ======= */
+.search-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.price-selector-container {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #ffffff;
+  border-radius: 6px;
+  padding: 6px 10px;
+  box-shadow: 0 0 3px rgba(0, 0, 0, 0.05);
+}
+
+.price-selector-container label {
+  font-size: 14px;
+  color: #333;
+  font-weight: 500;
+}
+
+.price-selector-container select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  border: 1px solid #cfe8ff;
+  border-radius: 6px;
+  padding: 8px 32px 8px 10px;
+  font-size: 14px;
+  color: #333;
+  cursor: pointer;
+  background-color: #f9fbff;
+  transition: all 0.2s ease-in-out;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8'><path fill='%23333' d='M1 1l5 5 5-5'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+}
+
+.price-selector-container select:hover {
+  border-color: #82c1ff;
+  box-shadow: 0 0 4px rgba(130, 193, 255, 0.4);
+}
+
+.price-selector-container select:focus {
+  outline: none;
+  border-color: #2b8af7;
+  box-shadow: 0 0 4px rgba(43, 138, 247, 0.5);
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .search-bar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .price-selector-container {
+    width: 100%;
+    justify-content: flex-start;
+    margin-top: 10px;
+  }
+
+  .price-selector-container label {
+    min-width: 50px;
+  }
+}
 
 </style>
 </head>
@@ -452,19 +523,35 @@ body {
     </a>
   </div>
 
-  <div class="search-bar">
-    <input type="text" id="searchInput" placeholder="Search Product or Enter Code (e.g., 00001)">
-    <button onclick="searchProduct()">Search</button>
-    <button onclick="clearSearch()" id="clearSearchBtn" style="display: none;">Clear</button>
-  </div>
+<div class="search-bar">
+  <input
+    type="text"
+    id="searchInput"
+    placeholder="Search Product or Enter Code (e.g., 00001)"
+  />
+  <button onclick="searchProduct()">Search</button>
+  <button onclick="clearSearch()" id="clearSearchBtn" style="display: none;">Clear</button>
 
-  <div class="product-list" id="productList">
-    <div class="loading-spinner" id="loadingSpinner"></div>
+  <!-- PRICE SELECTOR: styled and aligned inline -->
+  <div class="price-selector-container">
+    <label for="priceSelector">Price:</label>
+    <select id="priceSelector" aria-label="Select price type">
+      <option value="all">All Prices</option>
+      <option value="salesprice">Sales Price</option>
+      <option value="bmrp">BMRP</option>
+      <option value="secondprice">Second Price</option>
+      <option value="thirdprice">Third Price</option>
+    </select>
   </div>
-
-  <div class="pagination" id="pagination"></div>
-  <div class="page-info" id="pageInfo"></div>
 </div>
+
+<!-- Product and pagination sections remain below -->
+<div class="product-list" id="productList">
+  <div class="loading-spinner" id="loadingSpinner"></div>
+</div>
+
+<div class="pagination" id="pagination"></div>
+<div class="page-info" id="pageInfo"></div>
 
 
 
@@ -481,6 +568,67 @@ let isSearching = false;
 let searchTerm = '';
 let customerList = [];
 let serverCartQuantities = {}; // { [product_code]: qty currently in the cart }
+
+
+let selectedPriceKey = 'all';
+const PRICE_ORDER = ['salesprice','bmrp','secondprice','thirdprice'];
+
+function getSelectedPriceKey(){ return selectedPriceKey; }
+function setSelectedPriceKey(key){ selectedPriceKey = key || 'all'; applyPriceSelectionToProducts(); }
+function initPriceSelector(){
+  const sel = document.getElementById('priceSelector'); if(!sel) return;
+  sel.value = selectedPriceKey; sel.addEventListener('change', e => setSelectedPriceKey(e.target.value));
+}
+function applyPriceSelectionToProducts(){
+  const chosen = getSelectedPriceKey();
+  products = Array.isArray(products) ? products : [];
+  products.forEach(p=>{
+    if(!p.code) return;
+    const container = document.getElementById(`prices-${p.code}`); if(!container) return;
+    container.querySelectorAll('.price-item').forEach(item=>{
+      const key = item.getAttribute('data-key');
+      if(chosen === 'all'){ item.style.display='block'; item.style.fontWeight='400'; item.style.opacity='1'; }
+      else { if(key===chosen){ item.style.display='block'; item.style.fontWeight='700'; item.style.opacity = item.textContent.includes('—') ? '0.6' : '1'; } else item.style.display='none'; }
+    });
+  });
+}
+
+/* ✅ Add this helper right below */
+function getPriceFromBatch(batch, chosenKey){
+  if (!batch) {
+    console.warn('getPriceFromBatch: No batch data provided');
+    return 0;
+  }
+  
+  // If a specific price key is selected (not 'all')
+  if (chosenKey && chosenKey !== 'all') {
+    const val = batch[chosenKey];
+    if (val != null && val !== '') {
+      const n = Number(val);
+      if (!Number.isNaN(n)) {
+        console.log(`Using ${chosenKey} price:`, n);
+        return n;
+      }
+    }
+    console.warn(`Price key ${chosenKey} not found or invalid, falling back`);
+  }
+  
+  // Fallback to first available price
+  const order = ['salesprice','bmrp','secondprice','thirdprice'];
+  for (const k of order) {
+    const v = batch[k];
+    if (v != null && v !== '') {
+      const n = Number(v);
+      if (!Number.isNaN(n)) {
+        console.log(`Fallback to ${k} price:`, n);
+        return n;
+      }
+    }
+  }
+  
+  console.warn('No valid price found in batch');
+  return 0;
+}
 
 /* =========================
    Navigation
@@ -559,10 +707,10 @@ async function fetchProducts() {
     }
 
     const data = await response.json();
-    products = (data.results || []).map(p => ({
-      ...p,
-      displayPrice: p.batch?.salesprice ?? p.batch?.bmrp ?? 0
-    }));
+   products = (data.results || []).map(p => ({
+  ...p,
+  batch: p.batch || null
+}));
 
     // init qty maps
     products.forEach(product => {
@@ -680,26 +828,43 @@ function loadProducts() {
     if (product.product) description += product.product;
     if (product.brand) description += (description ? ' - ' : '') + product.brand;
     if (product.unit) description += (description ? ' ' : '') + product.unit;
+productRow.innerHTML = `
+  <div class="product-details">
+    <div class="product-name">${escapeHtml(product.name || '')}</div>
+    <div class="product-description">${escapeHtml(description)}</div>
+    <div class="product-specs">Code: ${escapeHtml(product.code || '')}</div>
 
-    productRow.innerHTML = `
-      <div class="product-details">
-        <div class="product-name">${escapeHtml(product.name || '')}</div>
-        <div class="product-description">${escapeHtml(description)}</div>
-        <div class="product-specs">Code: ${escapeHtml(product.code || '')}</div>
-        <div class="product-price">₹${(product.displayPrice || 0).toLocaleString()}</div>
-        <div class="in-cart-quantity" id="in-cart-${product.code}" style="${cartQuantities[product.code] > 0 ? '' : 'display:none;'}">
-          In cart: ${cartQuantities[product.code]}
-        </div>
+    <!-- Prices block (all shown by default) -->
+    <div class="product-prices" id="prices-${product.code}" style="margin-top:8px;">
+      <div class="price-item" data-key="salesprice" style="font-size:14px; margin:2px 0;">
+        <strong>Sales:</strong> ₹${product.batch && product.batch.salesprice != null ? Number(product.batch.salesprice).toLocaleString() : '—'}
       </div>
-      <div class="product-actions">
-        <div class="quantity-controls">
-          <button onclick="changeSelectedQuantity('${product.code}', -1)" ${selectedQuantities[product.code] <= 0 ? 'disabled' : ''}>-</button>
-          <div class="quantity-display" id="qty-${product.code}" onclick="enableQuantityInput('${product.code}')">${selectedQuantities[product.code] || 0}</div>
-          <button onclick="changeSelectedQuantity('${product.code}', 1)">+</button>
-        </div>
-        <button class="add-to-cart-btn" onclick="addToCart('${product.code}')" ${selectedQuantities[product.code] <= 0 ? 'disabled' : ''} title="Add ${selectedQuantities[product.code]} to Cart"></button>
+      <div class="price-item" data-key="bmrp" style="font-size:14px; margin:2px 0;">
+        <strong>BMRP:</strong> ₹${product.batch && product.batch.bmrp != null ? Number(product.batch.bmrp).toLocaleString() : '—'}
       </div>
-    `;
+      <div class="price-item" data-key="secondprice" style="font-size:14px; margin:2px 0;">
+        <strong>Second:</strong> ₹${product.batch && product.batch.secondprice != null ? Number(product.batch.secondprice).toLocaleString() : '—'}
+      </div>
+      <div class="price-item" data-key="thirdprice" style="font-size:14px; margin:2px 0;">
+        <strong>Third:</strong> ₹${product.batch && product.batch.thirdprice != null ? Number(product.batch.thirdprice).toLocaleString() : '—'}
+      </div>
+    </div>
+
+    <div class="in-cart-quantity" id="in-cart-${product.code}" style="${cartQuantities[product.code] > 0 ? '' : 'display:none;'}">
+      In cart: ${cartQuantities[product.code]}
+    </div>
+  </div>
+
+  <div class="product-actions">
+    <div class="quantity-controls">
+      <button onclick="changeSelectedQuantity('${product.code}', -1)" ${selectedQuantities[product.code] <= 0 ? 'disabled' : ''}>-</button>
+      <div class="quantity-display" id="qty-${product.code}" onclick="enableQuantityInput('${product.code}')">${selectedQuantities[product.code] || 0}</div>
+      <button onclick="changeSelectedQuantity('${product.code}', 1)">+</button>
+    </div>
+    <button class="add-to-cart-btn" onclick="addToCart('${product.code}')" ${selectedQuantities[product.code] <= 0 ? 'disabled' : ''} title="Add ${selectedQuantities[product.code]} to Cart"></button>
+  </div>
+`;
+
     productList.appendChild(productRow);
   });
 
@@ -709,6 +874,7 @@ function loadProducts() {
   } else {
     setupPagination();
     updatePageInfo();
+    applyPriceSelectionToProducts();
   }
 }
 
@@ -720,32 +886,43 @@ function enableQuantityInput(productCode) {
   const qtyElement = $(`qty-${productCode}`);
   if (!qtyElement) return;
 
-  const currentValue = selectedQuantities[productCode];
+  const currentValue = selectedQuantities[productCode] ?? 0;
   const input = document.createElement('input');
   input.type = 'number';
   input.className = 'quantity-input';
   input.value = currentValue;
   input.min = '0';
-  input.onblur = function(){ updateQuantityFromInput(productCode, this); };
-  input.onkeypress = function(e){ if (e.key === 'Enter') updateQuantityFromInput(productCode, this); };
+  input.step = '0.001';           // 👈 allow fractional steps
+  input.inputMode = 'decimal';     // mobile keyboard
+  input.pattern = '[0-9]*[.]?[0-9]*';
+
+  input.onblur     = () => updateQuantityFromInput(productCode, input);
+  input.onkeypress = (e) => { if (e.key === 'Enter') updateQuantityFromInput(productCode, input); };
 
   qtyElement.replaceWith(input);
   input.focus(); input.select();
 }
+
 function updateQuantityFromInput(productCode, inputElement) {
-  const newValue = parseInt(inputElement.value) || 0;
-  if (newValue >= 0) {
-    selectedQuantities[productCode] = newValue;
-    const displayElement = document.createElement('div');
-    displayElement.className = 'quantity-display';
-    displayElement.id = `qty-${productCode}`;
-    displayElement.textContent = newValue;
-    displayElement.onclick = function(){ enableQuantityInput(productCode); };
-    inputElement.replaceWith(displayElement);
-    updateQuantityButtons(productCode);
-    updateAddToCartButton(productCode);
-  }
+  let newValue = parseFloat(inputElement.value);
+  if (Number.isNaN(newValue) || newValue < 0) newValue = 0;
+
+  // keep up to 3 decimals to match DB
+  newValue = +newValue.toFixed(3);
+
+  selectedQuantities[productCode] = newValue;
+
+  const displayElement = document.createElement('div');
+  displayElement.className = 'quantity-display';
+  displayElement.id = `qty-${productCode}`;
+  displayElement.textContent = newValue;
+  displayElement.onclick = () => enableQuantityInput(productCode);
+  inputElement.replaceWith(displayElement);
+
+  updateQuantityButtons(productCode);
+  updateAddToCartButton(productCode);
 }
+
 function changeSelectedQuantity(productCode, change) {
   if (!isCustomerSelected()) { showErrorMessage("⚠️ Please select a customer first"); return; }
   const newQuantity = (selectedQuantities[productCode] || 0) + change;
@@ -786,71 +963,99 @@ function updateAddToCartButton(productCode) {
 ========================= */
 async function addToCart(productCode) {
   // what user wants (from the quantity section)
-  const desiredQty = selectedQuantities[productCode] || 0;
-  // what’s already in the cart (from server)
-  const currentServerQty = serverCartQuantities[productCode] || 0;
+  const desiredQty = parseFloat(selectedQuantities[productCode] ?? 0);
+    const currentServerQty = parseFloat(serverCartQuantities[productCode] ?? 0);
+    const delta = +(desiredQty - currentServerQty).toFixed(3);
 
-  const delta = desiredQty - currentServerQty;
-  if (delta <= 0) {
-    showSuccessMessage?.("No change — quantity already in cart");
-    return;
-  }
-
-  try {
-    const customer = JSON.parse(localStorage.getItem('selected_customer') || '{}');
-    const cartData = {
-      user_id: localStorage.getItem("user_id"),
-      client_id: localStorage.getItem("client_id"),
-      customer_name: customer.name || 'Guest',
-      customer_phone: customer.phone || '',
-      customer_address: customer.address || '',
-      product_code: productCode,
-      quantity: delta // only the increment
-    };
-
-    const response = await fetch('/api/cart/add/', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(cartData)
-    });
-
-    const data = await response.json();
-    if (data.success) {
-      // server now equals desired
-      serverCartQuantities[productCode] = desiredQty;
-
-      // update local mirrors
-      cartQuantities[productCode] = desiredQty;
-
-      // update BOTH UI spots
-      const inCartEl = $(`in-cart-${productCode}`);
-      if (inCartEl) {
-        inCartEl.textContent = `In cart: ${desiredQty}`;
-        inCartEl.style.display = desiredQty > 0 ? 'block' : 'none';
-      }
-      const qtyEl = $(`qty-${productCode}`);
-      if (qtyEl) qtyEl.textContent = desiredQty;
-
-      // 🔹 highlight the row immediately based on desired qty
-      const row = $(`product-${productCode}`);
-      if (row) row.classList.toggle('in-cart', desiredQty > 0);
-
-      // other UI syncs
-      await updateCartBadge?.();
-      updateQuantityButtons?.(productCode);
-      updateAddToCartButton?.(productCode);
-
-      const product = products.find(p => p.code === productCode);
-      showSuccessMessage?.(`${product?.name || productCode} updated (In cart: ${desiredQty})`);
-    } else {
-      throw new Error(data.error || 'Failed to add to cart');
+    if (delta <= 0) {
+      showSuccessMessage?.("No change — quantity already in cart");
+      return;
     }
-  } catch (error) {
-    console.error('Error adding to cart:', error);
-    showErrorMessage?.("Failed to add to cart: " + error.message);
-  }
-}
 
+ try {
+    const customer = JSON.parse(localStorage.getItem('selected_customer') || '{}');
+
+  // get chosen price key and numeric price from the already-fetched product data
+  const chosenKey = getSelectedPriceKey();
+  const product = products.find(p => p.code === productCode);
+  
+  // Ensure we get the correct price based on selection
+  let chosenUnitPrice = 0;
+  if (product && product.batch) {
+    if (chosenKey && chosenKey !== 'all') {
+      // Use the specific selected price
+      const priceValue = product.batch[chosenKey];
+      chosenUnitPrice = (priceValue != null && priceValue !== '') ? Number(priceValue) : 0;
+    } else {
+      // Fall back to first available price
+      const priceOrder = ['salesprice', 'bmrp', 'secondprice', 'thirdprice'];
+      for (const key of priceOrder) {
+        const val = product.batch[key];
+        if (val != null && val !== '') {
+          chosenUnitPrice = Number(val);
+          break;
+        }
+      }
+    }
+  }
+
+  const cartData = {
+    user_id: localStorage.getItem("user_id"),
+    client_id: localStorage.getItem("client_id"),
+    customer_name: customer.name || 'Guest',
+    customer_phone: customer.phone || '',
+    customer_address: customer.address || '',
+    product_code: productCode,
+    quantity: delta, // only the increment
+    price_key: chosenKey,
+    unit_price: chosenUnitPrice  // <-- send numeric price to backend
+  };
+
+  // debug: confirm payload in browser console
+  console.log("DEBUG addToCart payload:", cartData);
+
+  const response = await fetch('/api/cart/add/', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(cartData)
+  });
+
+  const data = await response.json();
+  if (data.success) {
+    // server now equals desired
+    serverCartQuantities[productCode] = desiredQty;
+
+    // update local mirrors
+    cartQuantities[productCode] = desiredQty;
+
+    // update BOTH UI spots
+    const inCartEl = $(`in-cart-${productCode}`);
+    if (inCartEl) {
+      inCartEl.textContent = `In cart: ${desiredQty}`;
+      inCartEl.style.display = desiredQty > 0 ? 'block' : 'none';
+    }
+    const qtyEl = $(`qty-${productCode}`);
+    if (qtyEl) qtyEl.textContent = desiredQty;
+
+    // 🔹 highlight the row immediately based on desired qty
+    const row = $(`product-${productCode}`);
+    if (row) row.classList.toggle('in-cart', desiredQty > 0);
+
+    // other UI syncs
+    await updateCartBadge?.();
+    updateQuantityButtons?.(productCode);
+    updateAddToCartButton?.(productCode);
+
+    const product = products.find(p => p.code === productCode);
+    showSuccessMessage?.(`${product?.name || productCode} updated (In cart: ${desiredQty})`);
+  } else {
+    throw new Error(data.error || 'Failed to add to cart');
+  }
+} catch (error) {
+  console.error('Error adding to cart:', error);
+  showErrorMessage?.("Failed to add to cart: " + error.message);
+}
+}
 
 async function updateCartBadge() {
   try {
@@ -1308,6 +1513,7 @@ document.addEventListener('DOMContentLoaded', function () {
   fetchProducts();
   fetchCustomers();
   setupCustomerDropdown();
+  initPriceSelector();    
 
   window.addEventListener('storage', handleStorageEvent);
   window.addEventListener('focus', handleWindowFocus);

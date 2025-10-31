@@ -404,29 +404,31 @@
                 Invalid credentials. Please try again.
             </div>
 
-            <div class="form-group">
-                <label class="form-label" for="username">
-                    Username <span class="required">*</span>
-                </label>
-                <i class="fas fa-user input-icon"></i>
-                <input type="text" id="username" name="username" class="form-input" placeholder="Enter your Username" required autocomplete="username">
-            </div>
+         <div class="form-group">
+    <label class="form-label" for="clientId">
+        Client ID <span class="required">*</span>
+    </label>
+    <i class="fas fa-id-card input-icon"></i>
+    <input type="text" id="clientId" name="clientId" class="form-input" placeholder="Enter your Client ID" required>
+</div>
 
-            <div class="form-group">
-                <label class="form-label" for="clientId">
-                    Client ID <span class="required">*</span>
-                </label>
-                <i class="fas fa-id-card input-icon"></i>
-                <input type="text" id="clientId" name="clientId" class="form-input" placeholder="Enter your Client ID" required>
-            </div>
-            <div class="form-group">
-                <label class="form-label" for="password">
-                    Password <span class="required">*</span>
-                </label>
-                <i class="fas fa-lock input-icon"></i>
-                <input type="password" id="password" name="password" class="form-input" placeholder="Enter your Password" required autocomplete="current-password">
-                <i class="fas fa-eye toggle-password" id="togglePassword"></i>
-            </div>
+<div class="form-group">
+    <label class="form-label" for="username">
+        Username <span class="required">*</span>
+    </label>
+    <i class="fas fa-user input-icon"></i>
+    <input type="text" id="username" name="username" class="form-input" placeholder="Enter your Username" required autocomplete="username">
+</div>
+
+<div class="form-group">
+    <label class="form-label" for="password">
+        Password <span class="required">*</span>
+    </label>
+    <i class="fas fa-lock input-icon"></i>
+    <input type="password" id="password" name="password" class="form-input" placeholder="Enter your Password" required autocomplete="current-password">
+    <i class="fas fa-eye toggle-password" id="togglePassword"></i>
+</div>
+
 
 
             <button type="submit" class="login-btn" id="loginButton">
@@ -544,18 +546,19 @@
             document.getElementById(id).addEventListener('input', hideError);
         });
 
-        document.addEventListener('keydown', function(e) {
-            if (e.key === 'Enter') {
-                const focusedElement = document.activeElement;
-                if (focusedElement.id === 'username') {
-                    document.getElementById('clientId').focus();
-                    e.preventDefault();
-                } else if (focusedElement.id === 'clientId') {
-                    document.getElementById('password').focus();
-                    e.preventDefault();
-                }
-            }
-        });
+       document.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') {
+        const focusedElement = document.activeElement;
+        if (focusedElement.id === 'clientId') {
+            document.getElementById('username').focus();
+            e.preventDefault();
+        } else if (focusedElement.id === 'username') {
+            document.getElementById('password').focus();
+            e.preventDefault();
+        }
+    }
+});
+
 
                     // ✅ Toggle password visibility
 const togglePassword = document.getElementById('togglePassword');

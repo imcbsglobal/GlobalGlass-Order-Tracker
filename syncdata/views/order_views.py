@@ -1,111 +1,171 @@
-from django.shortcuts import render, redirect
-from django.http import JsonResponse
+import json
+import uuid
+from datetime import datetime, time
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+
+from django.shortcuts import render, redirect, get_object_or_404
+from django.http import JsonResponse, HttpResponseBadRequest
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from django.db import transaction
 from django.utils import timezone
 from django.core.paginator import Paginator
-import json
-import uuid
-from datetime import datetime, time
 
 from syncdata.models import Order, OrderItem, Cart, CartItem, AccProduct, AccProductBatch, ManualCustomer
+
+
+# ---------------- helpers ----------------
+def parse_decimal(value, default='0'):
+    """Safely parse a numeric input into Decimal."""
+    try:
+        return Decimal(str(value))
+    except (InvalidOperation, TypeError, ValueError):
+        return Decimal(str(default))
+
+def dec_to_json(d):
+    """Convert Decimal to float for JSON output (2 decimal places for money)."""
+    if isinstance(d, Decimal):
+        return float(d.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))
+    return d
 
 @csrf_exempt
 @require_http_methods(["POST"])
 def add_to_cart(request):
-    """Add product to cart"""
+    """Add product to cart (Decimal-safe)"""
     try:
         data = json.loads(request.body)
+
         user_id = data.get('user_id')
         client_id = data.get('client_id')
         customer_name = data.get('customer_name', 'Guest')
         customer_phone = data.get('customer_phone', '')
         customer_address = data.get('customer_address', '')
         product_code = data.get('product_code')
-        quantity = int(data.get('quantity', 1))
-        
+        quantity = parse_decimal(data.get('quantity', '1'))
 
-        
-        # Get product details
+        if not user_id or not client_id or not product_code:
+            return JsonResponse({'error': 'user_id, client_id and product_code are required'}, status=400)
+
+        # --- Product lookup ---
         try:
             product = AccProduct.objects.get(code=product_code, client_id=client_id)
         except AccProduct.DoesNotExist:
-            # Try to find the product without client_id filter first
-            try:
-                product = AccProduct.objects.get(code=product_code)
-                # If found, check if it has a different client_id
-                if product.client_id != client_id:
-                    return JsonResponse({
-                        'error': f'Product found but belongs to client {product.client_id}, not {client_id}'
-                    }, status=404)
-            except AccProduct.DoesNotExist:
-                return JsonResponse({
-                    'error': f'Product with code "{product_code}" not found in database'
-                }, status=404)
-        
+            # try without client filter, but enforce mismatch error if different client
+            product = AccProduct.objects.filter(code=product_code).first()
+            if not product:
+                return JsonResponse({'error': f'Product with code "{product_code}" not found in database'}, status=404)
+            if product.client_id != client_id:
+                return JsonResponse({'error': f'Product found but belongs to client {product.client_id}, not {client_id}'}, status=404)
+
+        # --- Batch lookup (highest price preferred) ---
         try:
-            # Use filter().order_by().first() to get the batch with highest sales price
-            product_batch = AccProductBatch.objects.filter(
-                productcode=product_code, 
-                client_id=client_id
-            ).order_by('-salesprice').first()
-            
+            product_batch = (
+                AccProductBatch.objects
+                .filter(productcode=product_code, client_id=client_id)
+                .order_by('-salesprice')
+                .first()
+            )
             if not product_batch:
-                # Try to find the batch without client_id filter first
-                product_batch = AccProductBatch.objects.filter(
-                    productcode=product_code
-                ).order_by('-salesprice').first()
-                
-                if product_batch and product_batch.client_id != client_id:
-                    return JsonResponse({
-                        'error': f'Product batch found but belongs to client {product_batch.client_id}, not {client_id}'
-                    }, status=404)
-                elif not product_batch:
-                    return JsonResponse({
-                        'error': f'Product batch with code "{product_code}" not found in database'
-                    }, status=404)
+                product_batch = (
+                    AccProductBatch.objects
+                    .filter(productcode=product_code)
+                    .order_by('-salesprice')
+                    .first()
+                )
+                if not product_batch:
+                    return JsonResponse({'error': f'Product batch with code "{product_code}" not found in database'}, status=404)
+                if product_batch.client_id != client_id:
+                    return JsonResponse({'error': f'Product batch found but belongs to client {product_batch.client_id}, not {client_id}'}, status=404)
         except Exception as e:
-            return JsonResponse({
-                'error': f'Error finding product batch: {str(e)}'
-            }, status=500)
-        
-        unit_price = float(product_batch.salesprice or 0)
-        
-        # Get or create cart for this customer
-        cart, created = Cart.objects.get_or_create(
+            return JsonResponse({'error': f'Error finding product batch: {str(e)}'}, status=500)
+
+        # --- Determine unit price (prefer frontend, else fallback by key order) ---
+        price_key = data.get('price_key')
+        frontend_unit_price = data.get('unit_price')
+
+        if frontend_unit_price is not None:
+            unit_price = parse_decimal(frontend_unit_price, '0')
+        else:
+            def get_batch_price(batch, key):
+                if not batch or not key:
+                    return None
+                return getattr(batch, key, None)
+
+            preferred_order = (
+                [price_key, 'salesprice', 'bmrp', 'secondprice', 'thirdprice']
+                if price_key and price_key != 'all'
+                else ['salesprice', 'bmrp', 'secondprice', 'thirdprice']
+            )
+
+            unit_price_val = None
+            for k in preferred_order:
+                val = get_batch_price(product_batch, k)
+                if val is not None:
+                    unit_price_val = val
+                    break
+
+            unit_price = parse_decimal(unit_price_val, '0')
+
+        # --- Get or create cart ---
+        cart, _ = Cart.objects.get_or_create(
             customer_name=customer_name,
             user_id=user_id,
             client_id=client_id,
             defaults={
                 'customer_phone': customer_phone,
-                'customer_address': customer_address
-            }
+                'customer_address': customer_address,
+            },
         )
-        
-        # Add or update cart item
+
+        # --- Add or update cart item ---
         cart_item, created = CartItem.objects.get_or_create(
             cart=cart,
             product_code=product_code,
             defaults={
                 'product_name': product.name or '',
                 'quantity': quantity,
-                'unit_price': unit_price
-            }
+                'unit_price': unit_price,  # Decimal
+            },
         )
-        
+
         if not created:
-            cart_item.quantity += quantity
+            current_qty = cart_item.quantity or Decimal('0')
+            add_qty = quantity or Decimal('0')
+            new_quantity = current_qty + add_qty
+
+            if new_quantity <= 0:
+                cart_item.delete()
+                return JsonResponse({'success': True, 'message': 'Product removed from cart'})
+            else:
+                cart_item.quantity = new_quantity
+                cart_item.unit_price = unit_price  # keep latest chosen price
+                cart_item.save()
+        else:
+            # ensure latest price is stored even if created with defaults
+            cart_item.unit_price = unit_price
             cart_item.save()
-        
+
+        # --- Compute line total (Decimal) ---
+        line_total = (cart_item.unit_price or Decimal('0')) * (cart_item.quantity or Decimal('0'))
+
+        # --- Response ---
         return JsonResponse({
             'success': True,
             'message': 'Product added to cart',
-            'cart_id': cart.id
+            'cart_id': cart.id,
+            'cart_item': {
+                'id': cart_item.id,
+                'product_code': cart_item.product_code,
+                'product_name': cart_item.product_name,
+                'quantity': str(cart_item.quantity),              # preserve 3dp
+                'unit_price': dec_to_json(cart_item.unit_price),  # -> float with 2dp
+                'line_total': dec_to_json(line_total),            # -> float with 2dp
+            },
         })
-        
+
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
+
 
 @csrf_exempt
 @require_http_methods(["GET"])
@@ -129,11 +189,16 @@ def get_cart(request):
                     'id': item.id,
                     'product_code': item.product_code,
                     'product_name': item.product_name,
-                    'quantity': item.quantity,
-                    'unit_price': float(item.unit_price),
-                    'total_price': float(item.unit_price * item.quantity)
+                    'quantity': str(item.quantity),
+                    'unit_price': dec_to_json(item.unit_price),
+                    'total_price': dec_to_json((item.unit_price or Decimal('0')) * (item.quantity or Decimal('0')))
                 })
-            
+
+            total_amount = sum(
+                (item['total_price'] if isinstance(item['total_price'], (int, float)) else float(item['total_price']))
+                for item in cart_items
+            ) if cart_items else 0.0
+
             return JsonResponse({
                 'success': True,
                 'cart': {
@@ -142,9 +207,10 @@ def get_cart(request):
                     'customer_phone': cart.customer_phone,
                     'customer_address': cart.customer_address,
                     'items': cart_items,
-                    'total_amount': sum(item['total_price'] for item in cart_items)
+                    'total_amount': total_amount
                 }
             })
+
             
         except Cart.DoesNotExist:
             return JsonResponse({
@@ -169,7 +235,8 @@ def update_cart_item(request):
     try:
         data = json.loads(request.body)
         item_id = data.get('item_id')
-        quantity = int(data.get('quantity', 1))
+        quantity = parse_decimal(data.get('quantity', '1'))
+
         
         if quantity <= 0:
             # Remove item if quantity is 0 or negative
@@ -255,7 +322,7 @@ def clear_cart(request):
 @csrf_exempt
 @require_http_methods(["POST"])
 def place_order(request):
-    """Place order from cart"""
+    """Place order from cart (preserves discount)"""
     try:
         data = json.loads(request.body)
         user_id = data.get('user_id')
@@ -263,6 +330,12 @@ def place_order(request):
         customer_name = data.get('customer_name', 'Guest')
         customer_phone = data.get('customer_phone', '')
         customer_address = data.get('customer_address', '')
+
+        # optional discount fields coming from cart.html
+        subtotal_client = Decimal(str(data.get('subtotal') or '0'))
+        discount_client = Decimal(str(data.get('discount') or '0'))
+        final_total_client = Decimal(str(data.get('final_total') or '0'))
+        items_client = data.get('items') or []  # [{product_code, quantity, unit_price, total_price}, ...]
 
         with transaction.atomic():
             # Get cart
@@ -275,50 +348,74 @@ def place_order(request):
             except Cart.DoesNotExist:
                 return JsonResponse({'error': 'Cart not found'}, status=404)
 
-            # Check for existing pending order for this user
+            # Build server-side subtotal from cart
+            server_subtotal = Decimal('0.00')
+            lines = []
+            for ci in cart.items.all():
+                qty = ci.quantity or Decimal('0')
+                price = ci.unit_price or Decimal('0')
+                line = {
+                    'code': ci.product_code,
+                    'name': ci.product_name,
+                    'qty': qty,
+                    'unit': price,
+                    'orig_total': (price * qty),
+                }
+                server_subtotal += line['orig_total']
+                lines.append(line)
+
+            # Determine discount ratio.
+            # Prefer the client-provided discount if subtotal matches; else fall back to 0.
+            ratio = Decimal('0')
+            if subtotal_client > 0 and abs(subtotal_client - server_subtotal) <= Decimal('0.01'):
+                # accept client discount
+                ratio = (discount_client / subtotal_client) if subtotal_client != 0 else Decimal('0')
+            # clamp
+            if ratio < 0:
+                ratio = Decimal('0')
+            if ratio > 1:
+                ratio = Decimal('1')
+
+            # Find or create pending order
             order = Order.objects.filter(
-                user_id=user_id,
-                client_id=client_id,
-                customer_name=customer_name,
-                status='pending'
+                user_id=user_id, client_id=client_id,
+                customer_name=customer_name, status='pending'
             ).first()
 
             if not order:
-                # Create new order if none exists
                 order_number = f"ORD-{timezone.localdate().strftime('%Y%m%d')}-{uuid.uuid4().hex[:8].upper()}"
-                total_amount = sum(item.unit_price * item.quantity for item in cart.items.all())
                 order = Order.objects.create(
                     order_number=order_number,
                     customer_name=customer_name,
                     customer_phone=customer_phone,
                     customer_address=customer_address,
-                    total_amount=total_amount,
+                    total_amount=Decimal('0.00'),
                     status='pending',
                     user_id=user_id,
                     client_id=client_id
                 )
 
-            # Add/merge cart items into order
-            for cart_item in cart.items.all():
-                order_item = OrderItem.objects.filter(order=order, product_code=cart_item.product_code).first()
-                if order_item:
-                    # Update existing item
-                    order_item.quantity += cart_item.quantity
-                    order_item.total_price += cart_item.unit_price * cart_item.quantity
-                    order_item.save()
+            # Merge cart → order with discounted totals
+            for ln in lines:
+                discounted_line = (ln['orig_total'] * (Decimal('1') - ratio)).quantize(Decimal('0.01'))
+                oi = OrderItem.objects.filter(order=order, product_code=ln['code']).first()
+                if oi:
+                    oi.quantity = (oi.quantity or Decimal('0')) + ln['qty']
+                    oi.total_price = (oi.total_price or Decimal('0.00')) + discounted_line
+                    oi.unit_price = ln['unit']  # keep latest unit
+                    oi.save()
                 else:
-                    # Create new item
                     OrderItem.objects.create(
                         order=order,
-                        product_code=cart_item.product_code,
-                        product_name=cart_item.product_name,
-                        quantity=cart_item.quantity,
-                        unit_price=cart_item.unit_price,
-                        total_price=cart_item.unit_price * cart_item.quantity
+                        product_code=ln['code'],
+                        product_name=ln['name'],
+                        quantity=ln['qty'],
+                        unit_price=ln['unit'],
+                        total_price=discounted_line,
                     )
 
-            # Update order total amount
-            order.total_amount = sum(item.total_price for item in order.items.all())
+            # Recompute order total as sum of discounted line totals
+            order.total_amount = sum(i.total_price for i in order.items.all())
             order.save()
 
             # Clear cart
@@ -333,6 +430,7 @@ def place_order(request):
 
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
+
 
 
 @csrf_exempt
@@ -473,14 +571,16 @@ def update_order_item(request):
     try:
         data = json.loads(request.body)
         item_id = data.get('item_id')
-        quantity = int(data.get('quantity', 1))
+        quantity = parse_decimal(data.get('quantity', '1'))
+
         
         if quantity <= 0:
             return delete_order_item(request)
         
         order_item = OrderItem.objects.get(id=item_id)
         order_item.quantity = quantity
-        order_item.total_price = order_item.unit_price * quantity
+        order_item.total_price = (order_item.unit_price or Decimal('0')) * (quantity or Decimal('0'))
+
         order_item.save()
         
         # Update order total

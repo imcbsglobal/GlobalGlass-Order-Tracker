@@ -720,35 +720,56 @@
   text-align: center;
 }
 
-/* Quantity controls */
+/* === Bigger Quantity Bar Styling === */
 .quantity-control {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
+  gap: 18px;
   direction: ltr;
+  min-width: 200px;              /* wider */
+  padding: 10px 16px;            /* more breathing room */
+  background: #f1f5ff;           /* softer light-blue background */
+  border-radius: 12px;           /* smoother corners */
+  border: 2px solid #3b82f6;     /* strong blue border */
+  box-shadow: 0 4px 10px rgba(59, 130, 246, 0.15);
 }
 
 .quantity-btn {
-  width: 28px;
-  height: 28px;
-  border: 1px solid #d1d5db;
-  background: #fff;
-  border-radius: 6px;
+  width: 90px;                   /* bigger buttons */
+  height: 40px;
+  border: 2px solid #2563eb;
+  background: linear-gradient(135deg, #3b82f6, #2563eb);
+  border-radius: 8px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   font-weight: 700;
-  padding: 0;
+  font-size: 18px;               /* larger symbol */
+  color: white;
+  transition: all 0.2s ease;
+}
+
+.quantity-btn:hover {
+  transform: translateY(-1px);
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
 }
 
 .quantity-value {
-  min-width: 40px;
+  min-width: 70px;               /* larger number area */
   text-align: center;
   font-weight: 700;
   direction: ltr;
+  padding: 10px 16px;
+  background: #fff;
+  border-radius: 8px;
+  border: 2px solid #2563eb;
+  font-size: 18px;               /* bigger font */
+  color: #1e40af;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.05);
 }
+
 
 /* Remove all the conflicting duplicate styles below this line */
 
@@ -1356,6 +1377,7 @@
     padding: 10px;
   }
 }
+
     </style>
   </head>
 
@@ -1501,6 +1523,44 @@
               </button>
             </div>
           </div>
+         <!-- Refresh Button -->
+<div style="display: flex; justify-content: flex-end; margin-top: -20px;">
+  <button
+    id="refreshButton"
+    style="
+      background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      padding: 10px 20px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      box-shadow: 0 4px 8px rgba(59, 130, 246, 0.3);
+      transition: all 0.3s ease;
+    "
+  >
+    🔄 Refresh
+  </button>
+</div>
+<!-- View Pending (toggle) -->
+<div style="display:flex; align-items:center; gap:12px;">
+  <button id="viewPendingBtn"
+    style="
+      background: linear-gradient(135deg,#3b82f6,#1d4ed8);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 10px 18px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      box-shadow: 0 4px 8px rgba(59,130,246,0.25);
+      transition: all 0.2s ease;
+    ">
+    🔎 View Pending Orders
+  </button>
+</div>
 
           <!-- Table Container -->
           <div class="table-container" style="margin-top: 20px; width: 100%">
@@ -2112,15 +2172,20 @@ async function fetchOrders(filters = {}) {
 
       // Save editing_order and editing_order_cart for the edit flow
       localStorage.setItem("editing_order", JSON.stringify(order));
-      const editingCart = (order.items || []).map((it) => ({
-        id: it.id,
-        product_code: it.product_code || it.sku || it.product_id || "",
-        product_name: it.product_name || it.name || "",
-        quantity: it.quantity || it.qty || 0,
-        unit_price: it.unit_price != null ? it.unit_price : it.price || 0,
-        total_price: (it.quantity || it.qty || 0) * (it.unit_price || it.price || 0),
-        raw: it,
-      }));
+      const editingCart = (order.items || []).map((it) => {
+        const qty = it.quantity ?? it.qty ?? 0;
+        const unit = (it.unit_price != null) ? it.unit_price : (it.price ?? 0);
+        const line = (it.total_price != null) ? it.total_price : (qty * unit); // prefer server value
+        return {
+          id: it.id,
+          product_code: it.product_code || it.sku || it.product_id || "",
+          product_name: it.product_name || it.name || "",
+          quantity: qty,
+          unit_price: unit,
+          total_price: line,
+          raw: it,
+        };
+      });
       localStorage.setItem("editing_order_cart", JSON.stringify(editingCart));
 
       // Update items table (stable on-screen order)
@@ -2153,10 +2218,14 @@ itemsInStableOrder.forEach((item, index) => {
   row.setAttribute("data-item-id", item.id); // handy for future in-place updates
 
           // we pass 'this' to onclick handlers so increase/decrease can inspect the clicked button
-        row.innerHTML = `
+row.innerHTML = `
   <td>${index + 1}</td>
   <td>${escapeHtml(item.product_name || item.name || "Unknown product")}</td>
-  <td><span>${formatPrice(item.unit_price != null ? item.unit_price : item.price || 0)}</span></td>
+  <td><span>${formatPrice(
+    item.total_price != null && (item.quantity || item.qty)
+      ? item.total_price / (item.quantity || item.qty || 1)
+      : (item.unit_price != null ? item.unit_price : item.price || 0)
+  )}</span></td>
   <td>
     <div class="quantity-control">
       <button class="quantity-btn negative" onclick="decreaseQuantity(${item.id}, this)" ${((item.quantity || item.qty || 0) <= 1) ? "disabled" : ""}>-</button>
@@ -2192,81 +2261,104 @@ itemsInStableOrder.forEach((item, index) => {
   }
 
   // Increase / Decrease quantity handlers (receive clicked button as second param)
-  function increaseQuantity(itemId, btnEl) {
-    try {
-      const quantityElement = btnEl.parentElement.querySelector(".quantity-value");
-      const currentQuantity = parseInt(quantityElement.textContent || "0", 10);
-      updateOrderItem(itemId, currentQuantity + 1, "increase");
-    } catch (e) {
-      console.error("increaseQuantity error", e);
-    }
-  }
+ function increaseQuantity(itemId, btnEl) {
+  try {
+    const quantityElement = btnEl.parentElement.querySelector(".quantity-value");
+    const currentQuantity = parseFloat(quantityElement.textContent || "0") || 0;
+    const newQuantity = (currentQuantity + 1).toFixed(3);
+    updateOrderItem(itemId, parseFloat(newQuantity), "increase");
 
-  function decreaseQuantity(itemId, btnEl) {
-    try {
-      const quantityElement = btnEl.parentElement.querySelector(".quantity-value");
-      const currentQuantity = parseInt(quantityElement.textContent || "0", 10);
-      if (currentQuantity > 1) {
-        updateOrderItem(itemId, currentQuantity - 1, "decrease");
-      }
-    } catch (e) {
-      console.error("decreaseQuantity error", e);
-    }
+    // Update the UI immediately for feedback
+    quantityElement.textContent = newQuantity;
+  } catch (e) {
+    console.error("increaseQuantity error", e);
   }
+}
+
+function decreaseQuantity(itemId, btnEl) {
+  try {
+    const quantityElement = btnEl.parentElement.querySelector(".quantity-value");
+    const currentQuantity = parseFloat(quantityElement.textContent || "0") || 0;
+
+    if (currentQuantity > 0) {
+      const newQuantity = Math.max(0, currentQuantity - 1).toFixed(3);
+      updateOrderItem(itemId, parseFloat(newQuantity), "decrease");
+
+      // Update the UI immediately for feedback
+      quantityElement.textContent = newQuantity;
+    }
+  } catch (e) {
+    console.error("decreaseQuantity error", e);
+  }
+}
+
 
   // Manual quantity set with inline input (no alert/prompt)
-  function manualSetQuantity(itemId, currentQty) {
-    try {
-      // Find the span for this item and replace with an input temporarily
-      const row = document.querySelector(`tr[data-item-id="${itemId}"]`);
-      if (!row) return;
-      const container = row.querySelector(".quantity-control");
-      if (!container) return;
-      const valueSpan = container.querySelector(".quantity-value");
-      if (!valueSpan) return;
+function manualSetQuantity(itemId, currentQty) {
+  try {
+    const row = document.querySelector(`tr[data-item-id="${itemId}"]`);
+    if (!row) return;
+    const container = row.querySelector(".quantity-control");
+    if (!container) return;
+    const valueSpan = container.querySelector(".quantity-value");
 
-      const input = document.createElement("input");
-      input.type = "number";
-      input.min = "1";
-      input.step = "1";
-      input.value = String(currentQty || 1);
-      input.style.width = "64px";
-      input.style.textAlign = "center";
-      input.style.fontWeight = "700";
-      input.style.border = "1px solid #d1d5db";
-      input.style.borderRadius = "4px";
-      input.style.padding = "2px 6px";
+    // Build decimal-friendly input
+    const input = document.createElement("input");
+    input.type = "number";
+    input.min = "0";
+    input.step = "0.001";                         // allow 3 d.p.
+    input.value = (parseFloat(currentQty) || 0).toFixed(3);
+    input.style.width = "120px";
+    input.style.textAlign = "center";
+    input.style.fontWeight = "700";
+    input.style.border = "1px solid #d1d5db";
+    input.style.borderRadius = "4px";
+    input.style.padding = "2px 6px";
 
-      valueSpan.replaceWith(input);
-      input.focus();
-      input.select();
+    const okBtn = document.createElement("button");
+    okBtn.textContent = "OK";
+    okBtn.className = "quantity-ok-btn";
+    okBtn.style.marginLeft = "8px";
+    okBtn.style.padding = "4px 8px";
+    okBtn.style.border = "none";
+    okBtn.style.borderRadius = "6px";
+    okBtn.style.background = "#3b82f6";
+    okBtn.style.color = "white";
+    okBtn.style.cursor = "pointer";
+    okBtn.style.fontSize = "12px";
 
-      const commit = () => {
-        const parsed = parseInt(input.value, 10);
-        if (!Number.isFinite(parsed) || parsed < 1) {
-          showErrorMessage("Please enter a valid number (1 or more)");
-          input.focus();
-          return;
-        }
-        updateOrderItem(itemId, parsed, "set");
-      };
+    container.innerHTML = "";
+    container.appendChild(input);
+    container.appendChild(okBtn);
+    input.focus(); input.select();
 
-      const cancel = () => {
-        // Re-render via viewOrder so UI goes back to normal
-        if (currentOrderDetails && currentOrderDetails.id) {
-          viewOrder(currentOrderDetails.id);
-        }
-      };
+    const commit = () => {
+      const parsed = parseFloat(input.value);
+      if (!Number.isFinite(parsed) || parsed < 0) {
+        showErrorMessage("Please enter a valid number (≥ 0)");
+        input.focus();
+        return;
+      }
+      const fixed = +parsed.toFixed(3);          // clamp to 3 d.p.
+      updateOrderItem(itemId, fixed, "set");
+      // reflect immediately; modal will re-render after server confirms
+      valueSpan && (valueSpan.textContent = fixed.toFixed(3));
+    };
 
-      input.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") { e.preventDefault(); commit(); }
-        if (e.key === "Escape") { e.preventDefault(); cancel(); }
-      });
-      input.addEventListener("blur", () => commit());
-    } catch (e) {
-      console.error("manualSetQuantity error", e);
-    }
+    const cancel = () => {
+      if (currentOrderDetails && currentOrderDetails.id) viewOrder(currentOrderDetails.id);
+    };
+
+    okBtn.addEventListener("click", commit);
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") { e.preventDefault(); commit(); }
+      if (e.key === "Escape") { e.preventDefault(); cancel(); }
+    });
+  } catch (e) {
+    console.error("manualSetQuantity error", e);
   }
+}
+
 
   function closeModal() {
     const modalEl = document.getElementById("orderHistoryModal");
@@ -2636,7 +2728,44 @@ async function loadOrders() {
     window.decreaseQuantity = decreaseQuantity;
     window.updateOrderItem = updateOrderItem;
   }
-</script>
 
-  </body>
+  // Refresh button event
+document.getElementById("refreshButton").addEventListener("click", function () {
+  // Option 1: Reload the entire page
+  location.reload();
+
+  // Option 2: If you want to refresh just the orders table without reloading:
+  // loadOrders();
+});
+
+// Toggle "View Pending Orders" button
+const viewPendingBtn = document.getElementById("viewPendingBtn");
+if (viewPendingBtn) {
+  viewPendingBtn.addEventListener("click", function () {
+    // Toggle: if already filtering pending, clear filter; otherwise set it
+    if (currentFilters.status === "pending") {
+      currentFilters.status = "";
+      viewPendingBtn.textContent = "🔎 View Pending Orders";
+      viewPendingBtn.style.boxShadow = "0 4px 8px rgba(59,130,246,0.25)"; // normal
+      // preserve existing date filters / page if you want — reset page to 1
+      currentFilters.page = 1;
+      loadOrders();
+    } else {
+      // Optionally clear date filters if you want "pending" across all dates:
+      // document.getElementById('fromDate').value = '';
+      // document.getElementById('toDate').value = '';
+      // currentFilters.fromDate = '';
+      // currentFilters.toDate = '';
+
+      currentFilters.status = "pending";
+      currentFilters.page = 1;
+      viewPendingBtn.textContent = "✅ Showing Pending (click to show all)";
+      viewPendingBtn.style.boxShadow = "0 6px 14px rgba(37,99,235,0.35)"; // active visual
+      loadOrders();
+    }
+  });
+}
+
+</script>
+ </body>
 </html>

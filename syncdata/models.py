@@ -1,3 +1,4 @@
+from decimal import Decimal
 from django.db import models
 from django.contrib.auth.models import User
 
@@ -56,22 +57,26 @@ class AccProduct(models.Model):
 
 class AccProductBatch(models.Model):
     productcode = models.CharField(max_length=30, primary_key=True)
-    cost = models.DecimalField(
-        max_digits=12, decimal_places=3, blank=True, null=True)
-    salesprice = models.DecimalField(
-        max_digits=10, decimal_places=3, blank=True, null=True)
-    bmrp = models.DecimalField(
-        max_digits=12, decimal_places=3, blank=True, null=True)
+    cost = models.DecimalField(max_digits=12, decimal_places=3, blank=True, null=True)
+    salesprice = models.DecimalField(max_digits=10, decimal_places=3, blank=True, null=True)
+    bmrp = models.DecimalField(max_digits=12, decimal_places=3, blank=True, null=True)
     barcode = models.CharField(max_length=35, blank=True, null=True)
-    secondprice = models.DecimalField(
-        max_digits=10, decimal_places=3, blank=True, null=True)
-    thirdprice = models.DecimalField(
-        max_digits=10, decimal_places=3, blank=True, null=True)
+    secondprice = models.DecimalField(max_digits=10, decimal_places=3, blank=True, null=True)
+    thirdprice = models.DecimalField(max_digits=10, decimal_places=3, blank=True, null=True)
     client_id = models.CharField(max_length=50)
+
+    @property
+    def discounted_price(self):
+        """Return discounted price (e.g., 10% off)"""
+        discount_rate = 0.10  # 10% discount
+        if self.salesprice:
+            return self.salesprice * (1 - discount_rate)
+        return None
 
     class Meta:
         db_table = 'acc_productbatch'
         managed = False
+
 
 
 class AccUsers(models.Model):
@@ -105,13 +110,21 @@ class Order(models.Model):
 
 class OrderItem(models.Model):
     id = models.AutoField(primary_key=True)
-    order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name='items')
+    order = models.ForeignKey('Order', on_delete=models.CASCADE, related_name='items')
     product_code = models.CharField(max_length=30)
     product_name = models.CharField(max_length=200)
-    quantity = models.IntegerField()
+
+    # <--- changed to DecimalField so fractional quantities like 1.500 are supported
+    quantity = models.DecimalField(max_digits=10, decimal_places=3, default=Decimal('1.000'))
+
     unit_price = models.DecimalField(max_digits=10, decimal_places=2)
-    total_price = models.DecimalField(max_digits=10, decimal_places=2)
-    
+
+    # optional: per-line discount percentage (store "10.00" for 10%)
+    discount_pct = models.DecimalField(max_digits=5, decimal_places=2, default=Decimal('0.00'))
+
+    # final line total after discount (persisted)
+    total_price = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+
     class Meta:
         db_table = 'order_items'
 
@@ -131,12 +144,19 @@ class Cart(models.Model):
 
 class CartItem(models.Model):
     id = models.AutoField(primary_key=True)
-    cart = models.ForeignKey(Cart, on_delete=models.CASCADE, related_name='items')
+    cart = models.ForeignKey('Cart', on_delete=models.CASCADE, related_name='items')
     product_code = models.CharField(max_length=30)
     product_name = models.CharField(max_length=200)
-    quantity = models.IntegerField(default=1)
+
+    # <--- changed to DecimalField so fractional quantities like 1.500 are supported
+    quantity = models.DecimalField(max_digits=10, decimal_places=3, default=Decimal('1.000'))
+
     unit_price = models.DecimalField(max_digits=10, decimal_places=2)
-    
+
+    # optional: per-item discount percentage and persisted discounted total
+    discount_pct = models.DecimalField(max_digits=5, decimal_places=2, default=Decimal('0.00'))
+    discounted_total = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+
     class Meta:
         db_table = 'cart_items'
         unique_together = ('cart', 'product_code')

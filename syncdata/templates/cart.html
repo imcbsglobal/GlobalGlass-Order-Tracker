@@ -572,7 +572,8 @@
         </div>
 
         <div class="cart-header">
-            <a href="#" class="back-button" onclick="backToProducts()"; return false;">
+            <a href="#" class="back-button" onclick="backToProducts(); return false;">
+
                 <i class="fas fa-arrow-left"></i> Back to Products 
             </a>
             <h2 class="cart-title">
@@ -595,36 +596,46 @@
             </div>
             
             <!-- UPDATED ORDER SUMMARY SECTION -->
-            <div class="order-summary">
-                <div class="summary-card">
-                    <h3 class="summary-title">
-                        <i class="fas fa-receipt"></i>
-                        Order Summary
-                    </h3>
-                    <div class="summary-item">
-                        <span class="summary-label">Total Quantity (<span id="itemCount">0</span> items)</span>
-                        <span class="summary-value">₹<span id="cartTotal">0.00</span></span>
-                    </div>
-                    <div class="summary-item">
-                        <span class="summary-label">Delivery</span>
-                        <span class="summary-value">FREE</span>
-                    </div>
-                    <div class="summary-item">
-                        <span class="summary-label">Taxes</span>
-                        <span class="summary-value">₹0</span>
-                    </div>
-                    <div class="summary-total">
-                        <span class="total-label">
-                            <i class="fas fa-rupee-sign"></i>
-                            Total
-                        </span>
-                        <span class="summary-value">₹<span id="cartTotal">0.00</span></span>
-                    </div>
-                </div>
-                <button class="place-order-btn" onclick="processOrder()">
-                    <i class="fas fa-lock"></i>
-                    Place Order
-                </button>
+           <div class="order-summary">
+    <div class="summary-card">
+        <h3 class="summary-title">
+            <i class="fas fa-receipt"></i>
+            Order Summary
+        </h3>
+        <div class="summary-item">
+            <span class="summary-label">Subtotal (<span id="itemCount">0</span> items)</span>
+            <span class="summary-value">₹<span id="cartSubtotal">0.00</span></span>
+        </div>
+        <div class="summary-item">
+            <span class="summary-label">Delivery</span>
+            <span class="summary-value">FREE</span>
+        </div>
+        <div class="summary-item">
+            <span class="summary-label">Taxes</span>
+            <span class="summary-value">₹0</span>
+        </div>
+         <div class="summary-item discount-item">
+            <span class="summary-label">
+                <i class="fas fa-tag"></i>
+                Discount
+            </span>
+            <div class="discount-input-wrapper">
+       <input type="number" id="discountInput" value="0" min="0" max="100" step="0.01"
+placeholder="0" style="width: 70px; padding: 6px 8px; border: 1px solid #ddd; 
+border-radius: 4px; text-align: right; font-size: 14px;">
+                <span style="color: #666; font-size: 14px; margin-left: 4px;">%</span>
+            </div>
+        </div>
+        <div class="summary-total">
+            <span class="total-label">
+                <i class="fas fa-rupee-sign"></i>
+                Total
+            </span>
+            <span class="summary-value">₹<span id="cartTotal">0.00</span></span>
+        </div>
+    </div>
+                <button class="place-order-btn" onclick="processOrder()">Place Order</button>
+
             </div>
         </div>
     </div>
@@ -665,8 +676,23 @@
     }
 
     function getPrice(product) {
-        return product.batch?.salesprice || product.batch?.bmrp || 0;
+  // Prefer the exact unit price returned by the server/cart
+  if (product && product.unit_price != null && product.unit_price !== '') {
+    const n = Number(product.unit_price);
+    if (!Number.isNaN(n)) return n;
+  }
+  // Fallback through all known price keys
+  const b = (product && product.batch) || {};
+  for (const key of ['salesprice','bmrp','secondprice','thirdprice']) {
+    const v = b[key];
+    if (v != null && v !== '') {
+      const n = Number(v);
+      if (!Number.isNaN(n)) return n;
     }
+  }
+  return 0;
+}
+
 
     /* ----------  main variables  ---------- */
     let products = [];
@@ -758,66 +784,134 @@
                 });
 
                 // Set quantities from database cart
-                data.cart.items.forEach(item => {
-                    const product = products.find(p => p.code === item.product_code);
-                    if (product) {
-                        product.quantity = item.quantity;
-                        product.total = item.unit_price * item.quantity;
-                    }
-                });
+               // Set quantities from database cart
+           // Set quantities from database cart (parse decimals & save cart item id)
+    data.cart.items.forEach(item => {
+    const product = products.find(p => p.code === item.product_code);
+    if (product) {
+        product.quantity = parseFloat(item.quantity) || 0;                    // numeric with decimals
+        product.unit_price = parseFloat(item.unit_price) || getPrice(product); // numeric price
+        product.total = parseFloat(item.total_price) || (product.unit_price * product.quantity);
+        product.cart_item_id = item.id; // store server cart item id for updates
+    }
+});
+
             }
         } catch (error) {
             console.error('Error loading cart from database:', error);
         }
     }
 
-    function loadCartItems() {
-        const cartItems = document.getElementById('cartItems');
-        const itemCount = document.getElementById('itemCount');
-        const cartTotalSpans = document.querySelectorAll('#cartTotal');
+   function loadCartItems() {
+    const cartItems = document.getElementById('cartItems');
+    const itemCount = document.getElementById('itemCount');
+    const cartSubtotalEl = document.getElementById('cartSubtotal');
+    const cartTotalEls = document.querySelectorAll('#cartTotal');
+    const discountInput = document.getElementById('discountInput');
 
-        const cartProducts = products.filter(p => p.quantity > 0);
-        if (cartProducts.length === 0) {
-            cartItems.innerHTML = `<div class="empty-cart"><i class="fas fa-shopping-cart"></i><div>Your cart is empty</div></div>`;
-            itemCount.textContent = '0';
-            cartTotalSpans.forEach(el => el.textContent = '0.00');
-            return;
-        }
+   const cartProducts = products.filter(p => parseFloat(p.quantity) > 0);
+if (cartProducts.length === 0) {
+    cartItems.innerHTML = `
+        <div class="empty-cart">
+            <i class="fas fa-shopping-cart"></i>
+            <div>Your cart is empty</div>
+        </div>`;
+    itemCount.textContent = '0';
+    if (cartSubtotalEl) cartSubtotalEl.textContent = '0.00';
+    cartTotalEls.forEach(el => el.textContent = '0.00');
+    if (discountInput) discountInput.value = '0';
+    return;
+}
 
-        cartItems.innerHTML = '';
-        let totalItems = 0, totalAmount = 0;
 
-        cartProducts.forEach(product => {
-            const quantity = product.quantity;
-            const price = getPrice(product);
-            const total = price * quantity;
+    cartItems.innerHTML = '';
+    let totalItems = 0, subtotalAmount = 0;
 
-            totalItems += quantity;
-            totalAmount += total;
+    cartProducts.forEach(product => {
+        const quantity = product.quantity;
+        const price = product.unit_price || getPrice(product);
+        const total = (price || 0) * (quantity || 0);
 
-            const cartItemDiv = document.createElement('div');
-            cartItemDiv.className = 'cart-item';
-            cartItemDiv.innerHTML = `
-                <div class="cart-item-name">
-                    <i class="fas fa-box"></i> ${product.name} <span style="font-size:12px;color:#666;">(${product.code})</span>
-                </div>
-                <button class="delete-btn" onclick="removeFromCart('${product.code}')">
-                    <i class="fas fa-trash-alt"></i>
-                </button>
-                <div class="cart-item-description">${product.product || ''} - ${product.brand || ''}</div>
-                <div class="cart-item-specs">${product.unit || ''}</div>
-                <div class="cart-item-details">
-                    <div><i class="fas fa-tag"></i> <strong>Price:</strong> ₹${price.toLocaleString()}</div>
-                    <div><i class="fas fa-layer-group"></i> <strong>Quantity:</strong> ${quantity}</div>
-                    <div><i class="fas fa-calculator"></i> <strong>Total:</strong> ₹${total.toLocaleString()}</div>
-                </div>
-            `;
-            cartItems.appendChild(cartItemDiv);
-        });
+        totalItems += (quantity || 0);
+        subtotalAmount += (total || 0);
 
-        itemCount.textContent = totalItems;
-        cartTotalSpans.forEach(el => el.textContent = totalAmount.toLocaleString());
+
+        const cartItemDiv = document.createElement('div');
+        cartItemDiv.className = 'cart-item';
+        cartItemDiv.innerHTML = `
+            <div class="cart-item-name">
+                <i class="fas fa-box"></i> ${product.name} <span style="font-size:12px;color:#666;">(${product.code})</span>
+            </div>
+            <button class="delete-btn" onclick="removeFromCart('${product.code}')">
+                <i class="fas fa-trash-alt"></i>
+            </button>
+            <div class="cart-item-description">${product.product || ''} - ${product.brand || ''}</div>
+            <div class="cart-item-specs">${product.unit || ''}</div>
+      <div class="cart-item-details">
+    <div><i class="fas fa-tag"></i> <strong>Price:</strong> ₹${(price).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+
+    <div>
+      <i class="fas fa-layer-group"></i>
+      <strong>Quantity:</strong>
+      <input
+        type="number"
+        step="0.001"
+        min="0"
+        value="${(quantity).toFixed(3)}"
+        onchange="onQuantityChange('${product.code}', ${product.cart_item_id || 'null'}, this.value)"
+        style="width:90px; padding:4px; border-radius:4px; border:1px solid #ddd; text-align:right;"
+      />
+    </div>
+
+    <div>
+      <i class="fas fa-calculator"></i>
+      <strong>Total:</strong> ₹<span class="itemTotal" data-original="${total}">${(total).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+    </div>
+</div>
+
+
+            
+        `;
+        cartItems.appendChild(cartItemDiv);
+    });
+
+    itemCount.textContent = totalItems;
+    if (cartSubtotalEl) cartSubtotalEl.textContent = subtotalAmount.toLocaleString();
+    
+    // Calculate total with discount
+    updateTotalWithDiscount(subtotalAmount);
+}
+
+function updateTotalWithDiscount(subtotal) {
+    const discountInput = document.getElementById('discountInput');
+    const cartTotalEls = document.querySelectorAll('#cartTotal');
+
+    let raw = (discountInput?.value || '').toString().trim();
+    let discount = 0;
+
+    if (raw === '') raw = '0';
+
+    // Parse as percentage number (no % symbol needed)
+    const pct = parseFloat(raw);
+    if (!isNaN(pct) && pct >= 0) {
+        const clampedPct = Math.min(100, pct);
+        discount = subtotal * (clampedPct / 100);
+    } else {
+        discount = 0;
     }
+
+    const finalTotal = subtotal - discount;
+
+    // Format numbers nicely
+    const format = (v) => {
+        return Number.isInteger(v)
+            ? v.toLocaleString('en-IN')
+            : v.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    };
+
+    cartTotalEls.forEach(el => el.textContent = format(finalTotal));
+}
+
 
     async function removeFromCart(code) {
         try {
@@ -854,82 +948,196 @@
         }
     }
 
-    /* ----------  order processing  ---------- */
-    async function placeOrder() {
-        const btn = document.querySelector('.place-order-btn');
-        btn.classList.add('processing');
 
-        const cartItems = products.filter(p => p.quantity > 0);
-        if (cartItems.length === 0) {
-            showSuccessMessage("Cart is empty", 'error');
-            btn.classList.remove('processing');
-            return;
-        }
 
-        try {
-            const customer = JSON.parse(localStorage.getItem('selected_customer') || '{}');
-
-            // Prepare order data
-            const orderData = {
-                user_id: localStorage.getItem("user_id"),
-                client_id: localStorage.getItem("client_id"),
-                customer_name: customer.name || 'Guest',
-                customer_phone: customer.phone || '',
-                customer_address: customer.address || '',
-                items: cartItems.map(p => ({
-                    product_code: p.code,
-                    product_name: p.name,
-                    quantity: p.quantity,
-                    unit_price: getPrice(p)
-                }))
-            };
-            
-            const response = await fetch('/api/orders/place/', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(orderData)
-            });
-
-            const data = await response.json();
-            
-
-            
-            if (data.success) {
-                showSuccessMessage("Order placed successfully!");
-                
-                // Clear cart from database
-                try {
-                    const customer = JSON.parse(localStorage.getItem('selected_customer') || '{}');
-                    const clearData = {
-                        user_id: localStorage.getItem("user_id"),
-                        client_id: localStorage.getItem("client_id"),
-                        customer_name: customer.name || 'Guest'
-                    };
-
-                    await fetch('/api/cart/clear/', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify(clearData)
-                    });
-                } catch (error) {
-                    console.error('Error clearing cart:', error);
-                }
-                
-                setTimeout(() => window.location.href = '/index/', 1000);
-            } else {
-                throw new Error(data.error || 'Failed to place order');
-            }
-        } catch (error) {
-            console.error('Error placing order:', error);
-            showSuccessMessage("Failed to place order: " + error.message, 'error');
-        } finally {
-            btn.classList.remove('processing');
-        }
+async function onQuantityChange(productCode, cartItemId, newValue) {
+    // ensure numeric string or number is sent; preserve 3-decimal formatting
+    const qtyStr = (typeof newValue === 'string') ? newValue.trim() : String(newValue);
+    // fallback for invalid
+    if (!qtyStr || isNaN(parseFloat(qtyStr))) {
+        showSuccessMessage('Invalid quantity', 'error');
+        return;
     }
+
+    // Use server cart item id if available, else attempt to find via product code
+    const customer = JSON.parse(localStorage.getItem('selected_customer') || '{}');
+    const payload = {
+        user_id: localStorage.getItem('user_id'),
+        client_id: localStorage.getItem('client_id'),
+        customer_name: customer.name || 'Guest',
+        // prefer cart_item_id, else product_code (your backend remove/update uses item_id)
+        item_id: cartItemId || null,
+        product_code: productCode,
+        quantity: qtyStr  // send as string to preserve precision like "1.500"
+    };
+
+    try {
+        const response = await fetch('/api/cart/update/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        const data = await response.json();
+        if (data.success) {
+            // update local product quantity & totals then re-render
+            const product = products.find(p => p.code === productCode);
+            if (product) {
+                product.quantity = parseFloat(qtyStr);
+                const price = product.unit_price || getPrice(product);
+                product.total = (price * product.quantity);
+            }
+            loadCartItems();
+            showSuccessMessage('Quantity updated');
+        } else {
+            throw new Error(data.error || 'Update failed');
+        }
+    } catch (err) {
+        console.error('Error updating cart item quantity:', err);
+        showSuccessMessage('Failed to update quantity: ' + (err.message || err), 'error');
+        // Re-load to reflect server state
+        await loadCartFromDatabase();
+        loadCartItems();
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+  /* ----------  order processing  ---------- */
+async function placeOrder() {
+    const btn = document.querySelector('.place-order-btn');
+    btn.classList.add('processing');
+
+    const cartItems = products.filter(p => p.quantity > 0);
+    if (cartItems.length === 0) {
+        showSuccessMessage("Cart is empty", 'error');
+        btn.classList.remove('processing');
+        return;
+    }
+
+    try {
+        const customer = JSON.parse(localStorage.getItem('selected_customer') || '{}');
+
+        // --- compute subtotal and parse discount (same logic as updateTotalWithDiscount) ---
+        let subtotal = 0;
+        cartItems.forEach(p => {
+            const price = getPrice(p);
+            subtotal += price * p.quantity;
+        });
+
+        // parse discount input (accepts "10%" or absolute)
+        // parse discount input (percentage only - no % symbol needed)
+let raw = (document.getElementById('discountInput')?.value || '').toString().trim();
+if (raw === '') raw = '0';
+let discount = 0;
+
+const pct = parseFloat(raw);
+if (!isNaN(pct) && pct >= 0) {
+    const clampedPct = Math.min(100, pct);
+    discount = subtotal * (clampedPct / 100);
+}
+
+if (discount < 0) discount = 0;
+if (discount > subtotal) discount = subtotal;
+
+        const finalTotal = +(subtotal - discount).toFixed(2);
+
+        // pro-rata ratio to reduce each item
+        const ratio = subtotal === 0 ? 0 : (discount / subtotal);
+
+        // Build items array including discounted total_price
+        const itemsPayload = cartItems.map(p => {
+            const unit_price = getPrice(p);
+            const origLine = unit_price * p.quantity;
+            const discountedLine = origLine * (1 - ratio);
+            return {
+                product_code: p.code,
+                product_name: p.name,
+                quantity: String(Number(p.quantity).toFixed(3)),  // send as string "1.500"
+
+                unit_price: Number(unit_price.toFixed(2)),
+                total_price: Number(discountedLine.toFixed(2)) // discounted line total
+            };
+        });
+
+        // Now include discount & final total in the order payload
+        const orderData = {
+            user_id: localStorage.getItem("user_id"),
+            client_id: localStorage.getItem("client_id"),
+            customer_name: customer.name || 'Guest',
+            customer_phone: customer.phone || '',
+            customer_address: customer.address || '',
+            subtotal: Number(subtotal.toFixed(2)),
+            discount: Number(discount.toFixed(2)),
+            final_total: Number(finalTotal.toFixed(2)),
+            items: itemsPayload
+        };
+
+        // send order to server
+        const response = await fetch('/api/orders/place/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(orderData)
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            showSuccessMessage("Order placed successfully!");
+
+            // Clear cart from database
+            try {
+                const customerClear = JSON.parse(localStorage.getItem('selected_customer') || '{}');
+                const clearData = {
+                    user_id: localStorage.getItem("user_id"),
+                    client_id: localStorage.getItem("client_id"),
+                    customer_name: customerClear.name || 'Guest'
+                };
+
+                await fetch('/api/cart/clear/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(clearData)
+                });
+            } catch (error) {
+                console.error('Error clearing cart:', error);
+            }
+
+            // Build query params so index.html can show discounted totals immediately (stateless)
+          const orderId = data.order_id || ''; // backend should return this
+const params = new URLSearchParams({
+    order_id: String(orderId),
+    final: String(finalTotal),
+    disc: String(discount),
+    sub: String(subtotal)
+}).toString();
+
+// short delay for UX, then redirect to index with order_id
+setTimeout(() => {
+    window.location.href = '/index/?' + params;
+}, 800)
+}else {
+            throw new Error(data.error || 'Failed to place order');
+        }
+    } catch (error) {
+        console.error('Error placing order:', error);
+        showSuccessMessage("Failed to place order: " + error.message, 'error');
+    } finally {
+        btn.classList.remove('processing');
+    }
+}
+
 
     function processOrder() {
         const confirmOrder = confirm("Confirm order?");
@@ -955,32 +1163,18 @@ function getAuth() {
     } catch { return { name: 'Guest', phone: '', address: '' }; }
   }
 
-  async function placeOrder() {
-    const { user_id, client_id } = getAuth();
-    const { name, phone, address } = getSelectedCustomer();
-    if (!user_id || !client_id) { alert('Missing user_id/client_id'); return; }
 
-    const res = await fetch('/api/orders/place/', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        user_id, client_id,
-        customer_name: name,
-        customer_phone: phone,
-        customer_address: address
-      })
-    });
-    const data = await res.json();
-    if (!res.ok || !data.success) { alert(data.error || 'Failed to place order'); return; }
-
-    showToast('Order placed successfully!');
-    setTimeout(() => { window.location.href = '/index/'; }, 600);
-  }
 
   function showToast(msg){ const el=document.createElement('div'); el.className='success-message'; el.textContent=msg; document.body.appendChild(el); setTimeout(()=>el.remove(),1500); }
-  document.addEventListener('DOMContentLoaded', () => {
-    document.getElementById('placeOrderBtn')?.addEventListener('click', placeOrder);
-  });
+  // Add discount input listener
+const discountInput = document.getElementById('discountInput');
+if (discountInput) {
+    discountInput.addEventListener('input', function() {
+        const cartSubtotal = document.getElementById('cartSubtotal');
+        const subtotal = parseFloat(cartSubtotal?.textContent.replace(/,/g, '') || 0);
+        updateTotalWithDiscount(subtotal);
+    });
+}
 
  
 </script>
