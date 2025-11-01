@@ -614,18 +614,27 @@
             <span class="summary-label">Taxes</span>
             <span class="summary-value">₹0</span>
         </div>
-         <div class="summary-item discount-item">
-            <span class="summary-label">
-                <i class="fas fa-tag"></i>
-                Discount
-            </span>
-            <div class="discount-input-wrapper">
-       <input type="number" id="discountInput" value="0" min="0" max="100" step="0.01"
-placeholder="0" style="width: 70px; padding: 6px 8px; border: 1px solid #ddd; 
-border-radius: 4px; text-align: right; font-size: 14px;">
-                <span style="color: #666; font-size: 14px; margin-left: 4px;">%</span>
-            </div>
-        </div>
+        <div class="summary-item discount-item">
+  <span class="summary-label">
+    <i class="fas fa-tag"></i>
+    Discount
+  </span>
+  <div class="discount-input-wrapper">
+    <input
+      type="text"
+      id="discountInput"
+      value="0"
+      inputmode="decimal"
+      placeholder="10% or 10"
+      style="width: 90px; padding: 6px 8px; border: 1px solid #ddd; 
+      border-radius: 4px; text-align: right; font-size: 14px;"
+    />
+  </div>
+  <small style="display:block; color:#888; font-size:12px; margin-top:4px;">
+    Enter “10%” for percent or “10” for ₹ flat
+  </small>
+</div>
+
         <div class="summary-total">
             <span class="total-label">
                 <i class="fas fa-rupee-sign"></i>
@@ -883,34 +892,42 @@ if (cartProducts.length === 0) {
 }
 
 function updateTotalWithDiscount(subtotal) {
-    const discountInput = document.getElementById('discountInput');
-    const cartTotalEls = document.querySelectorAll('#cartTotal');
+  const discountInput = document.getElementById('discountInput');
+  const cartTotalEls = document.querySelectorAll('#cartTotal');
 
-    let raw = (discountInput?.value || '').toString().trim();
-    let discount = 0;
+  let raw = (discountInput?.value || '').toString().trim();
+  let discount = 0;
 
-    if (raw === '') raw = '0';
+  if (raw === '') raw = '0';
 
-    // Parse as percentage number (no % symbol needed)
-    const pct = parseFloat(raw);
-    if (!isNaN(pct) && pct >= 0) {
-        const clampedPct = Math.min(100, pct);
-        discount = subtotal * (clampedPct / 100);
+  // If it ends with %, treat as percentage; otherwise treat as flat amount
+  const isPercent = /%$/.test(raw);
+  const num = parseFloat(raw.replace('%', ''));
+
+  if (!isNaN(num) && num >= 0) {
+    if (isPercent) {
+      const clampedPct = Math.min(100, num);
+      discount = subtotal * (clampedPct / 100);
     } else {
-        discount = 0;
+      discount = Math.min(num, subtotal); // flat ₹ off
     }
+  } else {
+    discount = 0;
+  }
 
-    const finalTotal = subtotal - discount;
+  const finalTotal = subtotal - discount;
 
-    // Format numbers nicely
-    const format = (v) => {
-        return Number.isInteger(v)
-            ? v.toLocaleString('en-IN')
-            : v.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    };
+  const format = (v) =>
+    Number.isInteger(v)
+      ? v.toLocaleString('en-IN')
+      : v.toLocaleString('en-IN', {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        });
 
-    cartTotalEls.forEach(el => el.textContent = format(finalTotal));
+  cartTotalEls.forEach((el) => (el.textContent = format(finalTotal)));
 }
+
 
 
     async function removeFromCart(code) {
@@ -1034,20 +1051,28 @@ async function placeOrder() {
 
         // parse discount input (accepts "10%" or absolute)
         // parse discount input (percentage only - no % symbol needed)
+// parse discount input ("10%" = percent, "10" = ₹10 flat)
 let raw = (document.getElementById('discountInput')?.value || '').toString().trim();
 if (raw === '') raw = '0';
 let discount = 0;
 
-const pct = parseFloat(raw);
-if (!isNaN(pct) && pct >= 0) {
-    const clampedPct = Math.min(100, pct);
+const isPercent = /%$/.test(raw);
+const num = parseFloat(raw.replace('%', ''));
+
+if (!isNaN(num) && num >= 0) {
+  if (isPercent) {
+    const clampedPct = Math.min(100, num);
     discount = subtotal * (clampedPct / 100);
+  } else {
+    discount = Math.min(num, subtotal);
+  }
 }
 
 if (discount < 0) discount = 0;
 if (discount > subtotal) discount = subtotal;
 
-        const finalTotal = +(subtotal - discount).toFixed(2);
+const finalTotal = +(subtotal - discount).toFixed(2);
+
 
         // pro-rata ratio to reduce each item
         const ratio = subtotal === 0 ? 0 : (discount / subtotal);
