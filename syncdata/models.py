@@ -63,6 +63,7 @@ class AccProductBatch(models.Model):
     barcode = models.CharField(max_length=35, blank=True, null=True)
     secondprice = models.DecimalField(max_digits=10, decimal_places=3, blank=True, null=True)
     thirdprice = models.DecimalField(max_digits=10, decimal_places=3, blank=True, null=True)
+    fourthprice = models.DecimalField(max_digits=10, decimal_places=3, blank=True, null=True)  # ✅ NEW FIELD
     client_id = models.CharField(max_length=50)
 
     @property
