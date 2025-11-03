@@ -7,6 +7,7 @@ from syncdata.permissions import TokenOnlyPermission
 from django.db import models
 from syncdata.models import AccMaster, ManualCustomer, AccProductBatch, AccProduct
 
+
 class CustomerView(APIView):
     permission_classes = [TokenOnlyPermission]
 
@@ -59,12 +60,7 @@ class CustomerView(APIView):
         except Exception as e:
             print("❌ Error in POST /customers/:", str(e))
             return Response({"success": False, "message": "Server error"}, status=500)
-        
 
-
-from rest_framework.pagination import PageNumberPagination
-
-from rest_framework.pagination import PageNumberPagination
 
 class ProductView(APIView):
     permission_classes = [TokenOnlyPermission]
@@ -102,12 +98,24 @@ class ProductView(APIView):
                 "company": product.company,
                 "client_id": product.client_id,
                 "batch": {
+                    # Price values
                     "cost": batch.cost if batch else None,
                     "salesprice": batch.salesprice if batch else None,
                     "bmrp": batch.bmrp if batch else None,
-                    "barcode": batch.barcode if batch else None,
                     "secondprice": batch.secondprice if batch else None,
                     "thirdprice": batch.thirdprice if batch else None,
+                    "fourthprice": batch.fourthprice if batch else None,
+                    
+                    # Price names (newly added)
+                    "cost_name": batch.cost_name if batch else None,
+                    "sales_price_name": batch.sales_price_name if batch else None,
+                    "bmrp_name": batch.bmrp_name if batch else None,
+                    "secondprice_name": batch.secondprice_name if batch else None,
+                    "thirdprice_name": batch.thirdprice_name if batch else None,
+                    "fourthprice_name": batch.fourthprice_name if batch else None,
+                    
+                    # Other batch info
+                    "barcode": batch.barcode if batch else None,
                 } if batch else None
             })
 
