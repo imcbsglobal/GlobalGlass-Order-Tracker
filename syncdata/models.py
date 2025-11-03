@@ -55,6 +55,8 @@ class AccProduct(models.Model):
         managed = False
 
 
+from django.db import models
+
 class AccProductBatch(models.Model):
     productcode = models.CharField(max_length=30, primary_key=True)
     cost = models.DecimalField(max_digits=12, decimal_places=3, blank=True, null=True)
@@ -63,7 +65,16 @@ class AccProductBatch(models.Model):
     barcode = models.CharField(max_length=35, blank=True, null=True)
     secondprice = models.DecimalField(max_digits=10, decimal_places=3, blank=True, null=True)
     thirdprice = models.DecimalField(max_digits=10, decimal_places=3, blank=True, null=True)
-    fourthprice = models.DecimalField(max_digits=10, decimal_places=3, blank=True, null=True)  # ✅ NEW FIELD
+    fourthprice = models.DecimalField(max_digits=10, decimal_places=3, blank=True, null=True)
+
+    # ✅ Newly added name fields
+    cost_name = models.CharField(max_length=30, blank=True, null=True)
+    sales_price_name = models.CharField(max_length=30, blank=True, null=True)
+    bmrp_name = models.CharField(max_length=30, blank=True, null=True)
+    secondprice_name = models.CharField(max_length=30, blank=True, null=True)
+    thirdprice_name = models.CharField(max_length=30, blank=True, null=True)
+    fourthprice_name = models.CharField(max_length=30, blank=True, null=True)
+
     client_id = models.CharField(max_length=50)
 
     @property
@@ -77,6 +88,7 @@ class AccProductBatch(models.Model):
     class Meta:
         db_table = 'acc_productbatch'
         managed = False
+
 
 
 
