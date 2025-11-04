@@ -92,10 +92,11 @@ def add_to_cart(request):
                 return getattr(batch, key, None)
 
             preferred_order = (
-                [price_key, 'salesprice', 'bmrp', 'secondprice', 'thirdprice']
+                [price_key, 'cost','salesprice','bmrp','secondprice','thirdprice','fourthprice']
                 if price_key and price_key != 'all'
-                else ['salesprice', 'bmrp', 'secondprice', 'thirdprice']
+                else ['cost','salesprice','bmrp','secondprice','thirdprice','fourthprice']
             )
+
 
             unit_price_val = None
             for k in preferred_order:

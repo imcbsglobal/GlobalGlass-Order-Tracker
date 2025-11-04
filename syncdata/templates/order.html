@@ -571,7 +571,61 @@ let serverCartQuantities = {}; // { [product_code]: qty currently in the cart }
 
 
 let selectedPriceKey = 'all';
-const PRICE_ORDER = ['salesprice','bmrp','secondprice','thirdprice'];
+const PRICE_ORDER = ['cost','salesprice','bmrp','secondprice','thirdprice','fourthprice'];
+
+
+
+function mostCommon(arr) {
+  const cnt = new Map();
+  for (const v of arr) if (v) cnt.set(v, (cnt.get(v) || 0) + 1);
+  let best = null, max = 0;
+  for (const [k, c] of cnt) if (c > max) { best = k; max = c; }
+  return best;
+}
+
+function derivePriceLabels(products) {
+  const nameFields = {
+    cost: 'cost_name',
+    salesprice: 'sales_price_name',
+    bmrp: 'bmrp_name',
+    secondprice: 'secondprice_name',
+    thirdprice: 'thirdprice_name',
+    fourthprice: 'fourthprice_name',
+  };
+  const labels = {};
+  for (const key of Object.keys(nameFields)) {
+    const col = nameFields[key];
+    const vals = (products || []).map(p => p?.batch?.[col] || '').filter(Boolean);
+    labels[key] = mostCommon(vals) || '';     // if no DB name => hide tier in dropdown
+  }
+  return labels;
+}
+
+function rebuildPriceSelector(labels) {
+  const sel = document.getElementById('priceSelector');
+  if (!sel) return;
+  const options = [{ key: 'all', label: 'All Prices' }];
+  for (const k of PRICE_ORDER) {
+    const label = labels[k];
+    if (label) options.push({ key: k, label });
+  }
+  sel.innerHTML = options.map(o => `<option value="${o.key}">${o.label}</option>`).join('');
+  if (!options.some(o => o.key === selectedPriceKey)) selectedPriceKey = 'all';
+  sel.value = selectedPriceKey;
+  sel.onchange = e => setSelectedPriceKey(e.target.value);
+}
+
+function priceRowHTML(batch, key, nameField) {
+  const label = batch?.[nameField];
+  const val = batch?.[key];
+  if (!label) return ''; // no DB name => hide the tier completely
+  const txt = (val != null && val !== '') ? Number(val).toLocaleString() : '—';
+  return `
+    <div class="price-item" data-key="${key}" style="font-size:14px; margin:2px 0;">
+      <strong>${escapeHtml(label)}:</strong> ₹${txt}
+    </div>`;
+}
+
 
 function getSelectedPriceKey(){ return selectedPriceKey; }
 function setSelectedPriceKey(key){ selectedPriceKey = key || 'all'; applyPriceSelectionToProducts(); }
@@ -614,17 +668,17 @@ function getPriceFromBatch(batch, chosenKey){
   }
   
   // Fallback to first available price
-  const order = ['salesprice','bmrp','secondprice','thirdprice'];
-  for (const k of order) {
-    const v = batch[k];
-    if (v != null && v !== '') {
-      const n = Number(v);
-      if (!Number.isNaN(n)) {
-        console.log(`Fallback to ${k} price:`, n);
-        return n;
-      }
-    }
+ // Fallback to first available price
+const order = ['cost','salesprice','bmrp','secondprice','thirdprice','fourthprice'];
+for (const k of order) {
+  const v = batch[k];
+  if (v != null && v !== '') {
+    const n = Number(v);
+    if (!Number.isNaN(n)) return n;
   }
+}
+return 0;
+
   
   console.warn('No valid price found in batch');
   return 0;
@@ -711,6 +765,13 @@ async function fetchProducts() {
   ...p,
   batch: p.batch || null
 }));
+
+
+// ✅ Build dynamic dropdown names from DB
+const labels = derivePriceLabels(products);
+rebuildPriceSelector(labels);
+
+
 
     // init qty maps
     products.forEach(product => {
@@ -835,25 +896,16 @@ productRow.innerHTML = `
     <div class="product-specs">Code: ${escapeHtml(product.code || '')}</div>
 
     <!-- Prices block (all shown by default) -->
-    <div class="product-prices" id="prices-${product.code}" style="margin-top:8px;">
-      <div class="price-item" data-key="salesprice" style="font-size:14px; margin:2px 0;">
-        <strong>Sales:</strong> ₹${product.batch && product.batch.salesprice != null ? Number(product.batch.salesprice).toLocaleString() : '—'}
-      </div>
-      <div class="price-item" data-key="bmrp" style="font-size:14px; margin:2px 0;">
-        <strong>BMRP:</strong> ₹${product.batch && product.batch.bmrp != null ? Number(product.batch.bmrp).toLocaleString() : '—'}
-      </div>
-      <div class="price-item" data-key="secondprice" style="font-size:14px; margin:2px 0;">
-        <strong>Second:</strong> ₹${product.batch && product.batch.secondprice != null ? Number(product.batch.secondprice).toLocaleString() : '—'}
-      </div>
-      <div class="price-item" data-key="thirdprice" style="font-size:14px; margin:2px 0;">
-        <strong>Third:</strong> ₹${product.batch && product.batch.thirdprice != null ? Number(product.batch.thirdprice).toLocaleString() : '—'}
-      </div>
-    </div>
+ <div class="product-prices" id="prices-${product.code}" style="margin-top:8px;">
+  ${priceRowHTML(product.batch, 'cost', 'cost_name')}
+  ${priceRowHTML(product.batch, 'salesprice', 'sales_price_name')}
+  ${priceRowHTML(product.batch, 'bmrp', 'bmrp_name')}
+  ${priceRowHTML(product.batch, 'secondprice', 'secondprice_name')}
+  ${priceRowHTML(product.batch, 'thirdprice', 'thirdprice_name')}
+  ${priceRowHTML(product.batch, 'fourthprice', 'fourthprice_name')}
+</div>
 
-    <div class="in-cart-quantity" id="in-cart-${product.code}" style="${cartQuantities[product.code] > 0 ? '' : 'display:none;'}">
-      In cart: ${cartQuantities[product.code]}
-    </div>
-  </div>
+
 
   <div class="product-actions">
     <div class="quantity-controls">

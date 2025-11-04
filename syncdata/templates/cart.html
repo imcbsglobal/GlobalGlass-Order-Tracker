@@ -553,6 +553,54 @@
                 font-size: 14px;
             }
         }
+
+
+        /* --- Fix discount row layout --- */
+.summary-item.discount-item {
+  display: grid;                 /* grid handles wrapping cleanly */
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  column-gap: 12px;
+  row-gap: 6px;
+}
+
+.summary-item.discount-item .discount-input-wrapper {
+  justify-self: end;
+}
+
+.summary-item.discount-item .discount-input,
+.summary-item.discount-item input[type="text"] {
+  width: 120px;                 /* desktop/tablet default */
+  padding: 6px 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  text-align: right;
+  font-size: 14px;
+}
+
+/* hint text sits on its own full row */
+.summary-item.discount-item small,
+.summary-item.discount-item .discount-help {
+  grid-column: 1 / -1;
+  color: #888;
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+/* Mobile: stack fully, make input full-width */
+@media (max-width: 480px) {
+  .summary-item.discount-item {
+    grid-template-columns: 1fr;  /* one column */
+  }
+  .summary-item.discount-item .discount-input-wrapper {
+    justify-self: stretch;
+  }
+  .summary-item.discount-item .discount-input,
+  .summary-item.discount-item input[type="text"] {
+    width: 100% !important;      /* override any inline width */
+  }
+}
+
     </style>
 </head>
 <body>
@@ -614,7 +662,7 @@
             <span class="summary-label">Taxes</span>
             <span class="summary-value">₹0</span>
         </div>
-        <div class="summary-item discount-item">
+  <div class="summary-item discount-item">
   <span class="summary-label">
     <i class="fas fa-tag"></i>
     Discount
@@ -623,17 +671,17 @@
     <input
       type="text"
       id="discountInput"
+      class="discount-input"
       value="0"
       inputmode="decimal"
       placeholder="10% or 10"
-      style="width: 90px; padding: 6px 8px; border: 1px solid #ddd; 
-      border-radius: 4px; text-align: right; font-size: 14px;"
     />
   </div>
-  <small style="display:block; color:#888; font-size:12px; margin-top:4px;">
+  <small class="discount-help">
     Enter “10%” for percent or “10” for ₹ flat
   </small>
 </div>
+
 
         <div class="summary-total">
             <span class="total-label">
@@ -684,15 +732,15 @@
         setTimeout(() => div.remove(), 3000);
     }
 
-    function getPrice(product) {
-  // Prefer the exact unit price returned by the server/cart
+ function getPrice(product) {
+  // Prefer unit price from server/cart
   if (product && product.unit_price != null && product.unit_price !== '') {
     const n = Number(product.unit_price);
     if (!Number.isNaN(n)) return n;
   }
-  // Fallback through all known price keys
+  // Fallback through all known batch keys
   const b = (product && product.batch) || {};
-  for (const key of ['salesprice','bmrp','secondprice','thirdprice']) {
+  for (const key of ['cost','salesprice','bmrp','secondprice','thirdprice','fourthprice']) {
     const v = b[key];
     if (v != null && v !== '') {
       const n = Number(v);
@@ -701,6 +749,7 @@
   }
   return 0;
 }
+
 
 
     /* ----------  main variables  ---------- */
