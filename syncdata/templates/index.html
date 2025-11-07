@@ -2769,17 +2769,21 @@ async function loadOrders() {
         }
 
         // 2) Merge cart into existing pending order (or create if needed)
-        const placeResp = await fetch("/api/orders/place/", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            user_id: localStorage.getItem("user_id"),
-            client_id: localStorage.getItem("client_id"),
-            customer_name: customer.name || "Guest",
-            customer_phone: customer.phone || "",
-            customer_address: customer.address || "",
-          }),
-        });
+        // 2) Merge cart into the specific existing order (don't create a new one)
+const placeResp = await fetch("/api/orders/place/", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    user_id: localStorage.getItem("user_id"),
+    client_id: localStorage.getItem("client_id"),
+    customer_name: customer.name || "Guest",
+    customer_phone: customer.phone || "",
+    customer_address: customer.address || "",
+    order_id: currentOrderDetails.id,    // <<--- send the existing order id
+    action: "merge"                      // <<--- optional explicit intent
+  }),
+});
+
         const placeData = await placeResp.json();
         if (!placeResp.ok || !placeData.success) {
           throw new Error(placeData.error || "Failed to update order");

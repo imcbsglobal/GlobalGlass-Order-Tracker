@@ -240,20 +240,65 @@ body {
 }
 .quantity-display:hover { background: linear-gradient(135deg, #e3f2fd 0%, #d4edf7 100%); }
 .quantity-input {
-    background: linear-gradient(135deg, #f3f9ff 0%, #e8f8f5 100%);
-    padding: 5px 10px; border-radius: 8px; font-weight: bold; width: 70px; text-align: center; color: var(--primary-color);
-    border: 2px solid var(--accent-color); font-size: 14px; outline: none;
+  background: linear-gradient(135deg, #f3f9ff 0%, #e8f8f5 100%);
+  padding: 5px 10px;
+  border-radius: 8px;
+  font-weight: bold;
+  width: 200px;  /* ← increased from 50px to 100px */
+  text-align: center;
+  color: var(--primary-color);
+  border: 2px solid var(--accent-color);
+  font-size: 14px;
+  outline: none;
+}
+.quantity-display {
+  min-width: 100px !important;
+}
+.quantity-input {
+  width: 100px !important;
 }
 
+/* Bigger Add to Cart button */
 .add-to-cart-btn {
-    padding: 8px;
-    background: linear-gradient(135deg, var(--warning-color) 0%, #8f2808 100%);
-    color: white; border: none; border-radius: 50%; cursor: pointer; font-size: 14px; font-weight: bold; transition: all 0.2s;
-    box-shadow: 0 2px 6px rgba(255, 87, 34, 0.3); width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; position: relative;
+  padding: 10px 20px !important; /* more padding for bigger click area */
+  background: linear-gradient(135deg, var(--warning-color) 0%, #8f2808 100%) !important;
+  color: white !important;
+  border: none !important;
+  border-radius: 8px !important;
+  cursor: pointer !important;
+  font-size: 16px !important;
+  font-weight: bold !important;
+  transition: all 0.2s !important;
+  box-shadow: 0 3px 8px rgba(255, 87, 34, 0.35) !important;
+  width: 160px !important;  /* bigger width */
+  height: 48px !important;  /* taller */
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  position: relative !important;
 }
-.add-to-cart-btn::after { content: "🛒"; }
-.add-to-cart-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(255, 87, 34, 0.4); }
-.add-to-cart-btn:disabled { background: linear-gradient(135deg, #ccc 0%, #ddd 100%); cursor: not-allowed; box-shadow: none; transform: none; opacity: 0.7; }
+
+/* Hover effect */
+.add-to-cart-btn:hover {
+  transform: translateY(-2px) !important;
+  box-shadow: 0 5px 12px rgba(255, 87, 34, 0.45) !important;
+}
+
+/* Add text label instead of emoji-only icon */
+.add-to-cart-btn::after {
+  content: "🛒 Add to Cart" !important;
+  font-size: 15px !important;
+}
+
+/* Disabled state */
+.add-to-cart-btn:disabled {
+  background: linear-gradient(135deg, #ccc 0%, #ddd 100%) !important;
+  cursor: not-allowed !important;
+  box-shadow: none !important;
+  transform: none !important;
+  opacity: 0.7 !important;
+}
+
 
 .success-message {
     position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
@@ -458,6 +503,52 @@ body {
     min-width: 50px;
   }
 }
+/* Colorful editable price input */
+.editable-price-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    justify-content: flex-end;
+}
+
+.editable-price-group label {
+    font-size: 13px;
+    color: var(--primary-color);
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.editable-price-group input,
+input[id^="editablePrice-"] {
+    width: 120px;
+    padding: 8px 12px;
+    border: 2px solid var(--accent-color);
+    border-radius: 8px;
+    font-size: 14px;
+    text-align: right;
+    font-weight: 700;
+    color: var(--primary-color);
+    background: linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%);
+    box-shadow: 0 2px 6px rgba(255, 152, 0, 0.2);
+    transition: all 0.3s;
+}
+
+.editable-price-group input:focus,
+input[id^="editablePrice-"]:focus {
+    outline: none;
+    border-color: var(--warning-color);
+    background: linear-gradient(135deg, #fff9c4 0%, #ffecb3 100%);
+    box-shadow: 0 0 0 3px rgba(255, 152, 0, 0.2);
+    transform: scale(1.02);
+}
+
+.editable-price-group input:hover,
+input[id^="editablePrice-"]:hover {
+    border-color: var(--warning-color);
+    box-shadow: 0 3px 8px rgba(255, 152, 0, 0.3);
+}
+
 
 </style>
 </head>
@@ -488,6 +579,8 @@ body {
 
   <div class="cart-header">
     <button onclick="confirmBack()" class="back-button">← Back</button>
+    <button onclick="refreshOrderPage()" class="back-button" style="background-color:#ff5722;">⟳ Refresh</button>
+
 
     <div class="customer-selector">
       <div class="customer-dropdown-container">
@@ -502,7 +595,8 @@ body {
           aria-controls="customerDropdown"
           aria-expanded="false"
         />
-        <div class="dropdown-arrow" tabindex="0" role="button" aria-label="Search Customer">🔍</div>
+       <div class="dropdown-arrow" tabindex="0" role="button" aria-label="Add New Customer">➕</div>
+
 
 
 
@@ -629,59 +723,161 @@ function priceRowHTML(batch, key, nameField) {
 
 function getSelectedPriceKey(){ return selectedPriceKey; }
 function setSelectedPriceKey(key){ selectedPriceKey = key || 'all'; applyPriceSelectionToProducts(); }
+// Initialize editable price inputs and attach listeners
+products.forEach(product => {
+  if (!product.code) return;
+  const input = document.getElementById(`editablePrice-${product.code}`);
+  if (!input) return;
+
+  // set initial value based on current selected price key
+  const chosenKey = getSelectedPriceKey();
+  const baseValue = getPriceFromBatch(product.batch, chosenKey);
+  if (baseValue && baseValue !== 0) input.value = Number(baseValue).toFixed(2);
+  else input.value = '';
+
+  // store edited price in product.__edited so other code can access it
+ // --- Show warning if product is already in the cart, but still allow editing ---
+input.addEventListener('focus', () => {
+  const inCartQty = Number(serverCartQuantities[product.code] || 0);
+  if (inCartQty > 0) {
+    showErrorMessage(
+      `⚠️ "${product.name || product.code}" is already in the cart (Qty: ${inCartQty}). Editing the price will only apply to new additions.`
+    );
+  }
+});
+
+// --- Normal input handler: always accept typed edits ---
+input.addEventListener('input', () => {
+  const v = parseFloat(input.value);
+  if (!product.__edited) product.__edited = {};
+  product.__edited.unit_price = (!isNaN(v) && v >= 0) ? Number(v.toFixed(2)) : null;
+});
+
+});
+
 function initPriceSelector(){
-  const sel = document.getElementById('priceSelector'); if(!sel) return;
-  sel.value = selectedPriceKey; sel.addEventListener('change', e => setSelectedPriceKey(e.target.value));
+  const sel = document.getElementById('priceSelector');
+  if (!sel) return;
+  sel.value = selectedPriceKey;
+
+  sel.addEventListener('change', e => {
+    const newCategory = e.target.value;
+
+    // Check if cart has any items
+    const cartHasItems = Object.values(serverCartQuantities || {}).some(qty => qty > 0);
+    if (cartHasItems) {
+      // Revert dropdown to previous value
+      e.target.value = selectedPriceKey;
+
+      // Show warning
+      showErrorMessage("⚠️ You already have products in your cart. Please clear the cart before changing price category.");
+      return;
+    }
+
+    // If cart empty, allow change
+    setSelectedPriceKey(newCategory);
+  });
 }
+
 function applyPriceSelectionToProducts(){
   const chosen = getSelectedPriceKey();
   products = Array.isArray(products) ? products : [];
-  products.forEach(p=>{
-    if(!p.code) return;
-    const container = document.getElementById(`prices-${p.code}`); if(!container) return;
-    container.querySelectorAll('.price-item').forEach(item=>{
+
+  products.forEach(p => {
+    if (!p.code) return;
+    const container = document.getElementById(`prices-${p.code}`);
+    if (!container) return;
+
+    // --- existing logic: show/hide price rows based on selected key ---
+    container.querySelectorAll('.price-item').forEach(item => {
       const key = item.getAttribute('data-key');
-      if(chosen === 'all'){ item.style.display='block'; item.style.fontWeight='400'; item.style.opacity='1'; }
-      else { if(key===chosen){ item.style.display='block'; item.style.fontWeight='700'; item.style.opacity = item.textContent.includes('—') ? '0.6' : '1'; } else item.style.display='none'; }
+      if (chosen === 'all') {
+        item.style.display = 'block';
+        item.style.fontWeight = '400';
+        item.style.opacity = '1';
+      } else {
+        if (key === chosen) {
+          item.style.display = 'block';
+          item.style.fontWeight = '700';
+          item.style.opacity = item.textContent.includes('—') ? '0.6' : '1';
+        } else {
+          item.style.display = 'none';
+        }
+      }
     });
+
+    // --- NEW LOGIC: sync editable price input ---
+    const editEl = document.getElementById(`editablePrice-${p.code}`);
+    if (editEl) {
+      if (chosen && chosen !== 'all') {
+        // try exact key first
+        let val = null;
+        if (p.batch && p.batch[chosen] != null && p.batch[chosen] !== '') {
+          const n = Number(p.batch[chosen]);
+          if (!Number.isNaN(n)) val = n;
+        }
+        // fallback to any valid price if missing
+        if (val == null) val = getPriceFromBatch(p.batch, chosen);
+
+        editEl.value = (val != null && val !== 0) ? Number(val).toFixed(2) : '';
+        // clear any previously cached manual edit, because category changed
+        if (p.__edited) p.__edited.unit_price = null;
+      } else {
+        // if 'all' is selected, clear edit box
+        editEl.value = '';
+        if (p.__edited) p.__edited.unit_price = null;
+      }
+    }
   });
 }
 
 /* ✅ Add this helper right below */
-function getPriceFromBatch(batch, chosenKey){
+// Returns the best numeric price from a batch according to chosenKey and fallbacks.
+function getPriceFromBatch(batch, chosenKey) {
   if (!batch) {
-    console.warn('getPriceFromBatch: No batch data provided');
+    // no batch info — treat as zero price
     return 0;
   }
-  
+
   // If a specific price key is selected (not 'all')
   if (chosenKey && chosenKey !== 'all') {
     const val = batch[chosenKey];
     if (val != null && val !== '') {
       const n = Number(val);
-      if (!Number.isNaN(n)) {
-        console.log(`Using ${chosenKey} price:`, n);
-        return n;
-      }
+      if (!Number.isNaN(n)) return n;
     }
-    console.warn(`Price key ${chosenKey} not found or invalid, falling back`);
+    // fall through to fallback order if selected key missing/invalid
   }
-  
-  // Fallback to first available price
- // Fallback to first available price
-const order = ['cost','salesprice','bmrp','secondprice','thirdprice','fourthprice'];
-for (const k of order) {
-  const v = batch[k];
-  if (v != null && v !== '') {
-    const n = Number(v);
-    if (!Number.isNaN(n)) return n;
-  }
-}
-return 0;
 
-  
-  console.warn('No valid price found in batch');
+  // Fallback order for first available valid price
+  const order = ['cost','salesprice','bmrp','secondprice','thirdprice','fourthprice'];
+  for (const k of order) {
+    const v = batch[k];
+    if (v != null && v !== '') {
+      const n = Number(v);
+      if (!Number.isNaN(n)) return n;
+    }
+  }
+
+  // nothing usable found
   return 0;
+}
+
+// Returns Number (two-decimal) or null if user did not provide a valid edited price.
+// Looks at product.__edited first, then DOM input `editablePrice-<code>`.
+function getEditedPrice(code) {
+  if (typeof products !== 'undefined' && Array.isArray(products)) {
+    const p = products.find(x => x.code === code);
+    if (p && p.__edited && p.__edited.unit_price != null) {
+      const v = Number(p.__edited.unit_price);
+      return Number.isFinite(v) && v >= 0 ? Number(v.toFixed(2)) : null;
+    }
+  }
+  const el = document.getElementById(`editablePrice-${code}`);
+  if (!el) return null;
+  const v = parseFloat(el.value);
+  if (isNaN(v) || v < 0) return null;
+  return Number(v.toFixed(2));
 }
 
 /* =========================
@@ -693,6 +889,15 @@ function confirmBack() {
     clearCart();
   }
 }
+
+function refreshOrderPage() {
+  if (confirm("Refreshing will clear the current customer and cart. Continue?")) {
+    localStorage.removeItem('selected_customer');
+    localStorage.removeItem('cartData');
+    location.reload();
+  }
+}
+
 
 /* =========================
    Util / UI helpers
@@ -761,17 +966,14 @@ async function fetchProducts() {
     }
 
     const data = await response.json();
-   products = (data.results || []).map(p => ({
-  ...p,
-  batch: p.batch || null
-}));
+    products = (data.results || []).map(p => ({
+      ...p,
+      batch: p.batch || null
+    }));
 
-
-// ✅ Build dynamic dropdown names from DB
-const labels = derivePriceLabels(products);
-rebuildPriceSelector(labels);
-
-
+    // ✅ Build dynamic dropdown names from DB
+    const labels = derivePriceLabels(products);
+    rebuildPriceSelector(labels);
 
     // init qty maps
     products.forEach(product => {
@@ -841,6 +1043,7 @@ function saveCartToLocalStorage() {
   updateProductHighlights();
 }
 
+
 function loadProducts() {
   const productList = $('productList');
   if (!productList) return;
@@ -896,7 +1099,7 @@ productRow.innerHTML = `
     <div class="product-specs">Code: ${escapeHtml(product.code || '')}</div>
 
     <!-- Prices block (all shown by default) -->
- <div class="product-prices" id="prices-${product.code}" style="margin-top:8px;">
+<div class="product-prices" id="prices-${product.code}" style="margin-top:8px;">
   ${priceRowHTML(product.batch, 'cost', 'cost_name')}
   ${priceRowHTML(product.batch, 'salesprice', 'sales_price_name')}
   ${priceRowHTML(product.batch, 'bmrp', 'bmrp_name')}
@@ -905,16 +1108,28 @@ productRow.innerHTML = `
   ${priceRowHTML(product.batch, 'fourthprice', 'fourthprice_name')}
 </div>
 
+<!-- Product actions with editable price placed ABOVE quantity buttons -->
+<div class="product-actions" style="display:flex; flex-direction:column; align-items:flex-end; gap:8px;">
 
-
-  <div class="product-actions">
-    <div class="quantity-controls">
-      <button onclick="changeSelectedQuantity('${product.code}', -1)" ${selectedQuantities[product.code] <= 0 ? 'disabled' : ''}>-</button>
-      <div class="quantity-display" id="qty-${product.code}" onclick="enableQuantityInput('${product.code}')">${selectedQuantities[product.code] || 0}</div>
-      <button onclick="changeSelectedQuantity('${product.code}', 1)">+</button>
-    </div>
-    <button class="add-to-cart-btn" onclick="addToCart('${product.code}')" ${selectedQuantities[product.code] <= 0 ? 'disabled' : ''} title="Add ${selectedQuantities[product.code]} to Cart"></button>
+  <!-- Editable price input now ABOVE the quantity controls -->
+  <div style="display:flex; gap:6px; align-items:center;">
+    <label for="editablePrice-${product.code}" style="font-size:13px; color:#333;">Price (editable):</label>
+    <input id="editablePrice-${product.code}" type="number" step="0.01" min="0"
+           style="width:120px; padding:6px; border:1px solid #ddd; border-radius:4px;"
+           placeholder="0.00" />
   </div>
+
+  <div class="quantity-controls" style="margin-top:4px;">
+    <button onclick="changeSelectedQuantity('${product.code}', -1)" ${selectedQuantities[product.code] <= 0 ? 'disabled' : ''}>-</button>
+    <div class="quantity-display" id="qty-${product.code}" onclick="enableQuantityInput('${product.code}')">${selectedQuantities[product.code] || 0}</div>
+    <button onclick="changeSelectedQuantity('${product.code}', 1)">+</button>
+  </div>
+
+  <button class="add-to-cart-btn" onclick="addToCart('${product.code}')"
+          ${selectedQuantities[product.code] <= 0 ? 'disabled' : ''}
+          title="Add ${selectedQuantities[product.code]} to Cart"></button>
+</div>
+
 `;
 
     productList.appendChild(productRow);
@@ -1013,101 +1228,96 @@ function updateAddToCartButton(productCode) {
 /* =========================
    Server cart sync
 ========================= */
+/* =========================
+   Server cart sync
+========================= */
 async function addToCart(productCode) {
-  // what user wants (from the quantity section)
-  const desiredQty = parseFloat(selectedQuantities[productCode] ?? 0);
-    const currentServerQty = parseFloat(serverCartQuantities[productCode] ?? 0);
-    const delta = +(desiredQty - currentServerQty).toFixed(3);
-
-    if (delta <= 0) {
-      showSuccessMessage?.("No change — quantity already in cart");
-      return;
-    }
-
- try {
-    const customer = JSON.parse(localStorage.getItem('selected_customer') || '{}');
-
-  // get chosen price key and numeric price from the already-fetched product data
+  // --- require customer + explicit price category ---
+  if (!isCustomerSelected()) {
+    showErrorMessage("⚠️ Please select a customer first");
+    return;
+  }
   const chosenKey = getSelectedPriceKey();
-  const product = products.find(p => p.code === productCode);
-  
-  // Ensure we get the correct price based on selection
-  let chosenUnitPrice = 0;
-  if (product && product.batch) {
-    if (chosenKey && chosenKey !== 'all') {
-      // Use the specific selected price
-      const priceValue = product.batch[chosenKey];
-      chosenUnitPrice = (priceValue != null && priceValue !== '') ? Number(priceValue) : 0;
-    } else {
-      // Fall back to first available price
-      const priceOrder = ['salesprice', 'bmrp', 'secondprice', 'thirdprice'];
-      for (const key of priceOrder) {
-        const val = product.batch[key];
-        if (val != null && val !== '') {
-          chosenUnitPrice = Number(val);
-          break;
-        }
-      }
-    }
+  if (!chosenKey || chosenKey === 'all') {
+    showErrorMessage("⚠️ Please select a Price Category before adding to cart");
+    return;
   }
 
-  const cartData = {
-    user_id: localStorage.getItem("user_id"),
-    client_id: localStorage.getItem("client_id"),
-    customer_name: customer.name || 'Guest',
-    customer_phone: customer.phone || '',
-    customer_address: customer.address || '',
-    product_code: productCode,
-    quantity: delta, // only the increment
-    price_key: chosenKey,
-    unit_price: chosenUnitPrice  // <-- send numeric price to backend
-  };
+  const desiredQty = parseFloat(selectedQuantities[productCode] ?? 0);
+  const currentServerQty = parseFloat(serverCartQuantities[productCode] ?? 0);
+  const delta = +(desiredQty - currentServerQty).toFixed(3);
 
-  // debug: confirm payload in browser console
-  console.log("DEBUG addToCart payload:", cartData);
+  if (delta <= 0) {
+    showSuccessMessage?.("No change — quantity already in cart");
+    return;
+  }
 
-  const response = await fetch('/api/cart/add/', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(cartData)
-  });
-
-  const data = await response.json();
-  if (data.success) {
-    // server now equals desired
-    serverCartQuantities[productCode] = desiredQty;
-
-    // update local mirrors
-    cartQuantities[productCode] = desiredQty;
-
-    // update BOTH UI spots
-    const inCartEl = $(`in-cart-${productCode}`);
-    if (inCartEl) {
-      inCartEl.textContent = `In cart: ${desiredQty}`;
-      inCartEl.style.display = desiredQty > 0 ? 'block' : 'none';
-    }
-    const qtyEl = $(`qty-${productCode}`);
-    if (qtyEl) qtyEl.textContent = desiredQty;
-
-    // 🔹 highlight the row immediately based on desired qty
-    const row = $(`product-${productCode}`);
-    if (row) row.classList.toggle('in-cart', desiredQty > 0);
-
-    // other UI syncs
-    await updateCartBadge?.();
-    updateQuantityButtons?.(productCode);
-    updateAddToCartButton?.(productCode);
-
+  try {
+    const customer = JSON.parse(localStorage.getItem('selected_customer') || '{}');
     const product = products.find(p => p.code === productCode);
-    showSuccessMessage?.(`${product?.name || productCode} updated (In cart: ${desiredQty})`);
-  } else {
-    throw new Error(data.error || 'Failed to add to cart');
+    if (!product) { showErrorMessage("Product not found"); return; }
+
+    // Prefer edited price (user input). Fallback to selected price key and then the fallback order.
+    let chosenUnitPrice = getEditedPrice(productCode);
+    if (chosenUnitPrice == null) {
+      chosenUnitPrice = getPriceFromBatch(product.batch, chosenKey);
+    }
+
+    if (!Number.isFinite(chosenUnitPrice) || chosenUnitPrice < 0) chosenUnitPrice = 0;
+    chosenUnitPrice = Number(chosenUnitPrice.toFixed(2));
+
+    const cartData = {
+      user_id: localStorage.getItem("user_id"),
+      client_id: localStorage.getItem("client_id"),
+      customer_name: customer.name || 'Guest',
+      customer_phone: customer.phone || '',
+      customer_address: customer.address || '',
+      product_code: productCode,
+      quantity: delta,
+      price_key: chosenKey,
+      unit_price: chosenUnitPrice
+    };
+
+    console.log("DEBUG addToCart payload:", cartData);
+
+    const response = await fetch('/api/cart/add/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(cartData)
+    });
+
+    const data = await response.json();
+    if (data.success) {
+      serverCartQuantities[productCode] = desiredQty;
+      cartQuantities[productCode] = desiredQty;
+
+      const inCartEl = $(`in-cart-${productCode}`);
+      if (inCartEl) {
+        inCartEl.textContent = `In cart: ${desiredQty}`;
+        inCartEl.style.display = desiredQty > 0 ? 'block' : 'none';
+      }
+      const qtyEl = $(`qty-${productCode}`);
+      if (qtyEl) qtyEl.textContent = desiredQty;
+
+      const row = $(`product-${productCode}`);
+      if (row) row.classList.toggle('in-cart', desiredQty > 0);
+
+      await updateCartBadge?.();
+      updateQuantityButtons?.(productCode);
+      updateAddToCartButton?.(productCode);
+
+      const productName = product?.name || productCode;
+      showSuccessMessage?.(`${productName} updated (In cart: ${desiredQty})`);
+    } else {
+      throw new Error(data.error || 'Failed to add to cart');
+    }
+  } catch (error) {
+    console.error('Error adding to cart:', error);
+    showErrorMessage?.("Failed to add to cart: " + (error.message || error));
   }
-} catch (error) {
-  console.error('Error adding to cart:', error);
-  showErrorMessage?.("Failed to add to cart: " + error.message);
 }
-}
+
+
 
 async function updateCartBadge() {
   try {
@@ -1354,6 +1564,13 @@ function toggleCustomerDropdown(force = null) {
 }
 
 function selectCustomer(customer) {
+  // Check if any products already exist in cart before switching
+  const currentCart = Object.values(cartQuantities || {}).reduce((a, b) => a + b, 0);
+  if (currentCart > 0) {
+    showErrorMessage("⚠️ You already have products added. Please refresh before changing customer.");
+    return;
+  }
+
   localStorage.setItem('selected_customer', JSON.stringify(customer));
   const n = $('displayCustomerName');
   const p = $('displayCustomerPhone');
@@ -1362,10 +1579,11 @@ function selectCustomer(customer) {
   if (p) p.textContent = customer.phone || '';
   if (a) a.textContent = customer.place || customer.address || '';
 
-  localStorage.setItem('cartData', JSON.stringify({ [customer.name]: {} })); // preserve structure
+  localStorage.setItem('cartData', JSON.stringify({ [customer.name]: {} }));
   loadCartFromLocalStorage();
   toggleCustomerDropdown(false);
 }
+
 
 function isCustomerSelected() {
   const savedCustomer = JSON.parse(localStorage.getItem('selected_customer') || '{}');
@@ -1471,20 +1689,21 @@ function setupCustomerDropdown() {
   const customerInput  = $('customerSelector');
   const dropdownArrow  = document.querySelector('.dropdown-arrow');
 
-  if (customerInput) {
-    // typing/click should open manual popup
-    customerInput.addEventListener('click', function (e) {
-      e.stopPropagation();
-      showCustomerPopup();
-    });
-  }
-  if (dropdownArrow) {
-    // arrow toggles list
-    dropdownArrow.addEventListener('click', function (e) {
-      e.stopPropagation();
-      toggleCustomerDropdown(true);
-    });
-  }
+if (customerInput) {
+  // clicking text field → open dropdown list
+  customerInput.addEventListener('click', function (e) {
+    e.stopPropagation();
+    toggleCustomerDropdown(true);
+  });
+}
+if (dropdownArrow) {
+  // clicking search icon → open manual entry popup
+  dropdownArrow.addEventListener('click', function (e) {
+    e.stopPropagation();
+    showCustomerPopup();
+  });
+}
+
 
   // Popup buttons
   $('saveCustomerBtn')?.addEventListener('click', saveNewCustomer);

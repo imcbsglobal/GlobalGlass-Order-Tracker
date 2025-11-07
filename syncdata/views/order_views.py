@@ -40,6 +40,25 @@ def add_to_cart(request):
         customer_name = data.get('customer_name', 'Guest')
         customer_phone = data.get('customer_phone', '')
         customer_address = data.get('customer_address', '')
+        # Find or create pending order
+        order = Order.objects.filter(
+            user_id=user_id, client_id=client_id,
+            customer_name=customer_name, status='pending'
+        ).first()
+
+        if not order:
+            order_number = f"ORD-{timezone.localdate().strftime('%Y%m%d')}-{uuid.uuid4().hex[:8].upper()}"
+            order = Order.objects.create(
+                order_number=order_number,
+                customer_name=customer_name,
+                customer_phone=customer_phone,
+                customer_address=customer_address,
+                total_amount=Decimal('0.00'),
+                status='pending',
+                user_id=user_id,
+                client_id=client_id
+            )
+
         product_code = data.get('product_code')
         quantity = parse_decimal(data.get('quantity', '1'))
 
@@ -319,7 +338,6 @@ def clear_cart(request):
         
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
-
 @csrf_exempt
 @require_http_methods(["POST"])
 def place_order(request):
@@ -377,13 +395,23 @@ def place_order(request):
             if ratio > 1:
                 ratio = Decimal('1')
 
-            # Find or create pending order
-            order = Order.objects.filter(
-                user_id=user_id, client_id=client_id,
-                customer_name=customer_name, status='pending'
-            ).first()
+            # --- Decide whether to merge into an existing order or create a new one ---
+            order_id = data.get('order_id')  # optional order id from frontend
+            action = (data.get('action') or '').lower()  # e.g. "merge"
 
-            if not order:
+            order = None
+            if action == 'merge' and order_id:
+                try:
+                    # Try to load the specified order and ensure it belongs to same user/client
+                    order = Order.objects.get(id=order_id, user_id=user_id, client_id=client_id)
+                    # Only allow merging into pending orders by default
+                    if order.status != 'pending':
+                        return JsonResponse({'error': 'Can only merge into pending orders'}, status=400)
+                except Order.DoesNotExist:
+                    order = None
+
+            # If no existing order to merge into, create a NEW one
+            if order is None:
                 order_number = f"ORD-{timezone.localdate().strftime('%Y%m%d')}-{uuid.uuid4().hex[:8].upper()}"
                 order = Order.objects.create(
                     order_number=order_number,
@@ -391,7 +419,7 @@ def place_order(request):
                     customer_phone=customer_phone,
                     customer_address=customer_address,
                     total_amount=Decimal('0.00'),
-                    status='pending',
+                    status='pending',   # keep default pending
                     user_id=user_id,
                     client_id=client_id
                 )
@@ -431,7 +459,6 @@ def place_order(request):
 
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
-
 
 
 @csrf_exempt
