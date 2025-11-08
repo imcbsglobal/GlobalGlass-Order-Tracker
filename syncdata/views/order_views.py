@@ -40,24 +40,10 @@ def add_to_cart(request):
         customer_name = data.get('customer_name', 'Guest')
         customer_phone = data.get('customer_phone', '')
         customer_address = data.get('customer_address', '')
-        # Find or create pending order
-        order = Order.objects.filter(
-            user_id=user_id, client_id=client_id,
-            customer_name=customer_name, status='pending'
-        ).first()
 
-        if not order:
-            order_number = f"ORD-{timezone.localdate().strftime('%Y%m%d')}-{uuid.uuid4().hex[:8].upper()}"
-            order = Order.objects.create(
-                order_number=order_number,
-                customer_name=customer_name,
-                customer_phone=customer_phone,
-                customer_address=customer_address,
-                total_amount=Decimal('0.00'),
-                status='pending',
-                user_id=user_id,
-                client_id=client_id
-            )
+        # ❌ Removed Order creation (was causing junk empty orders)
+        # ✅ We don't create an Order when adding to cart
+        order = None
 
         product_code = data.get('product_code')
         quantity = parse_decimal(data.get('quantity', '1'))
@@ -116,7 +102,6 @@ def add_to_cart(request):
                 else ['cost','salesprice','bmrp','secondprice','thirdprice','fourthprice']
             )
 
-
             unit_price_val = None
             for k in preferred_order:
                 val = get_batch_price(product_batch, k)
@@ -169,6 +154,12 @@ def add_to_cart(request):
         line_total = (cart_item.unit_price or Decimal('0')) * (cart_item.quantity or Decimal('0'))
 
         # --- Response ---
+        barcode_val = None
+        try:
+            barcode_val = getattr(product_batch, 'barcode', None)
+        except Exception:
+            barcode_val = None
+
         return JsonResponse({
             'success': True,
             'message': 'Product added to cart',
@@ -180,11 +171,14 @@ def add_to_cart(request):
                 'quantity': str(cart_item.quantity),              # preserve 3dp
                 'unit_price': dec_to_json(cart_item.unit_price),  # -> float with 2dp
                 'line_total': dec_to_json(line_total),            # -> float with 2dp
+                'barcode': barcode_val,
             },
         })
 
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
+
+
 
 
 @csrf_exempt

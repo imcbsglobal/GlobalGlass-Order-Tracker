@@ -15,6 +15,10 @@ from syncdata.views.order_views import (
 from syncdata.views.app_view import CustomerView, ProductView
 
 urlpatterns = [
+
+
+    
+
     # Auth
     path('', LoginView.as_view(), name='login'),
     path('protected/', ProtectedView.as_view(), name='protected'),
