@@ -757,12 +757,14 @@
 
     /* ----------  DOM loaded  ---------- */
     document.addEventListener('DOMContentLoaded', function() {
-        // Set current date
-        document.getElementById('currentDate').textContent = new Date().toLocaleDateString('en-IN', {
-            day: 'numeric',
-            month: 'long',
-            year: 'numeric'
-        });
+  document.getElementById('currentDate').textContent = new Date().toLocaleDateString('en-IN', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric'
+  });
+  loadCartFromDatabase();
+
+
 
         // Load customer info
         const customerData = localStorage.getItem('selected_customer');
@@ -816,49 +818,64 @@
         }
     }
 
-    /* ----------  cart functions  ---------- */
-    async function loadCartFromDatabase() {
-        try {
-            const customer = JSON.parse(localStorage.getItem('selected_customer') || '{}');
-            const params = new URLSearchParams({
-                user_id: localStorage.getItem("user_id"),
-                client_id: localStorage.getItem("client_id"),
-                customer_name: customer.name || 'Guest'
-            });
 
-            const response = await fetch(`/api/cart/get/?${params}`, {
-                method: 'GET',
-                credentials: 'include',
-                headers: {
-                    'Content-Type': 'application/json'
-                }
-            });
-            const data = await response.json();
 
-            if (data.success && data.cart && data.cart.items) {
-                // Clear existing quantities
-                products.forEach(product => {
-                    product.quantity = 0;
-                });
+    
 
-                // Set quantities from database cart
-               // Set quantities from database cart
-           // Set quantities from database cart (parse decimals & save cart item id)
-    data.cart.items.forEach(item => {
-    const product = products.find(p => p.code === item.product_code);
-    if (product) {
-        product.quantity = parseFloat(item.quantity) || 0;                    // numeric with decimals
-        product.unit_price = parseFloat(item.unit_price) || getPrice(product); // numeric price
-        product.total = parseFloat(item.total_price) || (product.unit_price * product.quantity);
-        product.cart_item_id = item.id; // store server cart item id for updates
-    }
-});
+ async function loadCartFromDatabase() {
+    try {
+        const customer = JSON.parse(localStorage.getItem('selected_customer') || '{}');
+        const params = new URLSearchParams({
+            user_id: localStorage.getItem("user_id"),
+            client_id: localStorage.getItem("client_id"),
+            customer_name: customer.name || 'Guest'
+        });
 
+        const response = await fetch(`/api/cart/get/?${params}`, {
+            method: 'GET',
+            credentials: 'include',
+            headers: {
+                'Content-Type': 'application/json'
             }
-        } catch (error) {
-            console.error('Error loading cart from database:', error);
+        });
+
+        const data = await response.json();
+
+        if (data.success && data.cart && data.cart.items) {
+            // --- Clear existing quantities ---
+            products.forEach(product => {
+                product.quantity = 0;
+                product.total = 0;
+                product.cart_item_id = null;
+            });
+
+            // --- Build quick lookup map: product_code -> product ---
+            const productMap = {};
+            for (const p of products) {
+                if (p.code) productMap[p.code] = p;
+            }
+
+            // --- Update quantities and totals efficiently ---
+            for (const item of data.cart.items) {
+                const product = productMap[item.product_code];
+                if (product) {
+                    product.quantity = parseFloat(item.quantity) || 0;
+                    product.unit_price = parseFloat(item.unit_price) || getPrice(product);
+                    product.total = parseFloat(item.total_price) || (product.unit_price * product.quantity);
+                    product.cart_item_id = item.id;
+                }
+            }
+
+            // (optional) If you re-render or recompute totals, trigger it here:
+            if (typeof updateCartDisplay === 'function') {
+                updateCartDisplay();
+            }
         }
+    } catch (error) {
+        console.error('Error loading cart from database:', error);
     }
+}
+
 
    function loadCartItems() {
     const cartItems = document.getElementById('cartItems');

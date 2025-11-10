@@ -1,6 +1,8 @@
 import json
 import uuid
-from datetime import datetime, time
+import logging
+import time
+from datetime import datetime, time as dt_time
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 
 from django.shortcuts import render, redirect, get_object_or_404
@@ -8,10 +10,13 @@ from django.http import JsonResponse, HttpResponseBadRequest
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from django.db import transaction
+from django.db.models import F
 from django.utils import timezone
 from django.core.paginator import Paginator
 
 from syncdata.models import Order, OrderItem, Cart, CartItem, AccProduct, AccProductBatch, ManualCustomer
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------- helpers ----------------
@@ -22,16 +27,19 @@ def parse_decimal(value, default='0'):
     except (InvalidOperation, TypeError, ValueError):
         return Decimal(str(default))
 
+
 def dec_to_json(d):
     """Convert Decimal to float for JSON output (2 decimal places for money)."""
     if isinstance(d, Decimal):
         return float(d.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))
     return d
 
+
 @csrf_exempt
 @require_http_methods(["POST"])
 def add_to_cart(request):
-    """Add product to cart (Decimal-safe)"""
+    """Add product to cart (Decimal-safe, robust to custom PK names, optimized)."""
+    t_start = time.time()
     try:
         data = json.loads(request.body)
 
@@ -41,8 +49,7 @@ def add_to_cart(request):
         customer_phone = data.get('customer_phone', '')
         customer_address = data.get('customer_address', '')
 
-        # ❌ Removed Order creation (was causing junk empty orders)
-        # ✅ We don't create an Order when adding to cart
+        # We don't create an Order when adding to cart
         order = None
 
         product_code = data.get('product_code')
@@ -51,22 +58,39 @@ def add_to_cart(request):
         if not user_id or not client_id or not product_code:
             return JsonResponse({'error': 'user_id, client_id and product_code are required'}, status=400)
 
-        # --- Product lookup ---
-        try:
-            product = AccProduct.objects.get(code=product_code, client_id=client_id)
-        except AccProduct.DoesNotExist:
-            # try without client filter, but enforce mismatch error if different client
-            product = AccProduct.objects.filter(code=product_code).first()
+        # Determine safe PK field names (models may use custom PK names)
+        accprod_pk = AccProduct._meta.pk.name
+        accbatch_pk = AccProductBatch._meta.pk.name
+
+        # --- Product lookup (fetch minimal fields safely) ---
+        t0 = time.time()
+        product = (
+            AccProduct.objects
+            .filter(code=product_code, client_id=client_id)
+            .only(accprod_pk, 'code', 'name', 'client_id')
+            .first()
+        )
+        if not product:
+            product = (
+                AccProduct.objects
+                .filter(code=product_code)
+                .only(accprod_pk, 'code', 'name', 'client_id')
+                .first()
+            )
             if not product:
                 return JsonResponse({'error': f'Product with code "{product_code}" not found in database'}, status=404)
             if product.client_id != client_id:
                 return JsonResponse({'error': f'Product found but belongs to client {product.client_id}, not {client_id}'}, status=404)
+        logger.debug("Product lookup took %.3fs", time.time() - t0)
 
         # --- Batch lookup (highest price preferred) ---
+        t0 = time.time()
         try:
             product_batch = (
                 AccProductBatch.objects
                 .filter(productcode=product_code, client_id=client_id)
+                .only(accbatch_pk, 'productcode', 'client_id', 'salesprice', 'cost',
+                      'bmrp', 'secondprice', 'thirdprice', 'fourthprice', 'barcode')
                 .order_by('-salesprice')
                 .first()
             )
@@ -74,6 +98,8 @@ def add_to_cart(request):
                 product_batch = (
                     AccProductBatch.objects
                     .filter(productcode=product_code)
+                    .only(accbatch_pk, 'productcode', 'client_id', 'salesprice', 'cost',
+                          'bmrp', 'secondprice', 'thirdprice', 'fourthprice', 'barcode')
                     .order_by('-salesprice')
                     .first()
                 )
@@ -82,7 +108,9 @@ def add_to_cart(request):
                 if product_batch.client_id != client_id:
                     return JsonResponse({'error': f'Product batch found but belongs to client {product_batch.client_id}, not {client_id}'}, status=404)
         except Exception as e:
+            logger.exception("Error during product_batch lookup")
             return JsonResponse({'error': f'Error finding product batch: {str(e)}'}, status=500)
+        logger.debug("Batch lookup took %.3fs", time.time() - t0)
 
         # --- Determine unit price (prefer frontend, else fallback by key order) ---
         price_key = data.get('price_key')
@@ -97,9 +125,9 @@ def add_to_cart(request):
                 return getattr(batch, key, None)
 
             preferred_order = (
-                [price_key, 'cost','salesprice','bmrp','secondprice','thirdprice','fourthprice']
+                [price_key, 'cost', 'salesprice', 'bmrp', 'secondprice', 'thirdprice', 'fourthprice']
                 if price_key and price_key != 'all'
-                else ['cost','salesprice','bmrp','secondprice','thirdprice','fourthprice']
+                else ['cost', 'salesprice', 'bmrp', 'secondprice', 'thirdprice', 'fourthprice']
             )
 
             unit_price_val = None
@@ -112,6 +140,7 @@ def add_to_cart(request):
             unit_price = parse_decimal(unit_price_val, '0')
 
         # --- Get or create cart ---
+        t0 = time.time()
         cart, _ = Cart.objects.get_or_create(
             customer_name=customer_name,
             user_id=user_id,
@@ -121,45 +150,48 @@ def add_to_cart(request):
                 'customer_address': customer_address,
             },
         )
+        logger.debug("Cart get_or_create took %.3fs", time.time() - t0)
 
-        # --- Add or update cart item ---
-        cart_item, created = CartItem.objects.get_or_create(
+        # --- Add or update cart item (upsert + atomic increment if exists) ---
+        t0 = time.time()
+        cart_item, created = CartItem.objects.update_or_create(
             cart=cart,
             product_code=product_code,
             defaults={
                 'product_name': product.name or '',
-                'quantity': quantity,
-                'unit_price': unit_price,  # Decimal
+                'quantity': quantity,     # initial quantity for created rows
+                'unit_price': unit_price,
             },
         )
 
         if not created:
-            current_qty = cart_item.quantity or Decimal('0')
-            add_qty = quantity or Decimal('0')
-            new_quantity = current_qty + add_qty
+            # increment quantity atomically and update unit_price
+            CartItem.objects.filter(pk=cart_item.pk).update(
+                quantity=F('quantity') + quantity,
+                unit_price=unit_price
+            )
+            cart_item.refresh_from_db()
 
-            if new_quantity <= 0:
+            if (cart_item.quantity or Decimal('0')) <= 0:
                 cart_item.delete()
+                logger.debug("CartItem removed because quantity <= 0 after update")
                 return JsonResponse({'success': True, 'message': 'Product removed from cart'})
-            else:
-                cart_item.quantity = new_quantity
-                cart_item.unit_price = unit_price  # keep latest chosen price
-                cart_item.save()
         else:
-            # ensure latest price is stored even if created with defaults
-            cart_item.unit_price = unit_price
-            cart_item.save()
+            # guard against zero/negative quantity on creation
+            if (cart_item.quantity or Decimal('0')) <= 0:
+                cart_item.delete()
+                logger.debug("CartItem removed because quantity <= 0 on create")
+                return JsonResponse({'success': True, 'message': 'Product removed from cart'})
+
+        logger.debug("CartItem upsert took %.3fs", time.time() - t0)
 
         # --- Compute line total (Decimal) ---
         line_total = (cart_item.unit_price or Decimal('0')) * (cart_item.quantity or Decimal('0'))
 
         # --- Response ---
-        barcode_val = None
-        try:
-            barcode_val = getattr(product_batch, 'barcode', None)
-        except Exception:
-            barcode_val = None
+        barcode_val = getattr(product_batch, 'barcode', None) if product_batch else None
 
+        logger.info("add_to_cart total time: %.3fs", time.time() - t_start)
         return JsonResponse({
             'success': True,
             'message': 'Product added to cart',
@@ -176,9 +208,8 @@ def add_to_cart(request):
         })
 
     except Exception as e:
+        logger.exception("Unhandled exception in add_to_cart")
         return JsonResponse({'error': str(e)}, status=500)
-
-
 
 
 @csrf_exempt
@@ -332,6 +363,7 @@ def clear_cart(request):
         
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
+
 @csrf_exempt
 @require_http_methods(["POST"])
 def place_order(request):
