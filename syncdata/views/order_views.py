@@ -486,44 +486,100 @@ def place_order(request):
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
 
-
 @csrf_exempt
 @require_http_methods(["GET"])
 def get_orders(request):
-    """Get orders with filtering and pagination"""
+    """
+    Get orders with filtering and pagination (role-based visibility).
+    Role rules:
+      - 'level3' or 'admin' -> can view all orders for the token client_id
+      - other roles -> can only view orders where user_id == token user_id and client_id matches
+      - missing/empty role -> access denied
+    """
     try:
-        user_id = request.GET.get('user_id')
-        client_id = request.GET.get('client_id')
-        status = request.GET.get('status', '')
-        from_date = request.GET.get('from_date')  # YYYY-MM-DD
-        to_date = request.GET.get('to_date')      # YYYY-MM-DD
+        # 1) Extract token claims (preferred) or decode Bearer token fallback
+        token = getattr(request, "auth", None)
+        token_user_id = None
+        token_client_id = None
+        token_role = None
+
+        if token and isinstance(token, dict):
+            token_user_id = (token.get("user_id") or "").strip()
+            token_client_id = (token.get("client_id") or "").strip()
+            token_role = (token.get("role") or "").strip().lower()
+        else:
+            # Attempt to decode Bearer token from Authorization header
+            auth_header = request.META.get("HTTP_AUTHORIZATION", "")
+            if auth_header.startswith("Bearer "):
+                raw = auth_header.split(" ", 1)[1].strip()
+                try:
+                    from rest_framework_simplejwt.tokens import AccessToken as _AT
+                    claims = _AT(raw)
+                    token_user_id = str(claims.get("user_id") or "").strip()
+                    token_client_id = str(claims.get("client_id") or "").strip()
+                    token_role = str((claims.get("role") or "")).strip().lower()
+                except Exception:
+                    token_user_id = None
+                    token_client_id = None
+                    token_role = None
+
+        # 2) Query params (trimmed). Token claims authoritative when present.
+        q_user_id = (request.GET.get("user_id") or "").strip()
+        q_client_id = (request.GET.get("client_id") or "").strip()
+
+        user_id = token_user_id or q_user_id
+        client_id = token_client_id or q_client_id
+
+        # Require client_id at least
+        if not client_id:
+            return JsonResponse({'error': 'client_id is required (token or query param).'}, status=400)
+
+        # If token provided, require role to be present (defense-in-depth)
+        if token_user_id or token_client_id or token_role:
+            if not token_role:
+                return JsonResponse({'error': 'No role assigned. Access denied.'}, status=403)
+
+        role = (token_role or "").lower()
+
+        # Determine permissions
+        full_access_roles = ("level3", "admin")
+        can_view_all_client_orders = role in full_access_roles
+
+        # Build base queryset
+        if can_view_all_client_orders:
+            orders_qs = Order.objects.filter(client_id=client_id)
+        else:
+            if not user_id:
+                return JsonResponse({'error': 'user_id is required for non-admin users'}, status=400)
+            orders_qs = Order.objects.filter(client_id=client_id, user_id=user_id)
+
+        # Optional filters
         order_id = request.GET.get('order_id')
+        status_filter = request.GET.get('status', '')
+        from_date = request.GET.get('from_date')
+        to_date = request.GET.get('to_date')
         page = int(request.GET.get('page', 1))
         per_page = int(request.GET.get('per_page', 20))
-        
-        # Build query
-        orders = Order.objects.filter(user_id=user_id, client_id=client_id)
 
         if order_id:
-            orders = orders.filter(id=order_id)
-        
-        if status:
-            orders = orders.filter(status=status)
-
+            orders_qs = orders_qs.filter(id=order_id)
+        if status_filter:
+            orders_qs = orders_qs.filter(status=status_filter)
         if from_date:
-            orders = orders.filter(updated_at__date__gte=from_date)
+            orders_qs = orders_qs.filter(updated_at__date__gte=from_date)
         if to_date:
-            orders = orders.filter(updated_at__date__lte=to_date)
-        orders = orders.order_by('-updated_at')
-        
-        # Paginate unless requesting a specific order_id
+            orders_qs = orders_qs.filter(updated_at__date__lte=to_date)
+
+        orders_qs = orders_qs.order_by('-updated_at')
+
+        # Pagination
         if order_id:
-            page_obj = list(orders)
+            page_obj = list(orders_qs)
         else:
-            paginator = Paginator(orders, per_page)
+            paginator = Paginator(orders_qs, per_page)
             page_obj = paginator.get_page(page)
-        
-        # Prepare response data
+
+        # Serialize
         orders_data = []
         for order in page_obj:
             order_items = []
@@ -532,11 +588,11 @@ def get_orders(request):
                     'id': item.id,
                     'product_code': item.product_code,
                     'product_name': item.product_name,
-                    'quantity': item.quantity,
+                    'quantity': float(item.quantity) if hasattr(item, 'quantity') else item.quantity,
                     'unit_price': float(item.unit_price),
                     'total_price': float(item.total_price)
                 })
-            
+
             orders_data.append({
                 'id': order.id,
                 'order_number': order.order_number,
@@ -545,19 +601,16 @@ def get_orders(request):
                 'customer_address': order.customer_address,
                 'total_amount': float(order.total_amount),
                 'status': order.status,
-                'created_at': timezone.localtime(order.created_at).isoformat(),
-                'updated_at': timezone.localtime(order.updated_at).isoformat(),
+                'created_at': timezone.localtime(order.created_at).isoformat() if order.created_at else None,
+                'updated_at': timezone.localtime(order.updated_at).isoformat() if order.updated_at else None,
                 'items': order_items,
                 'item_count': len(order_items),
-                'total_quantity': sum(item.quantity for item in order.items.all())
+                'total_quantity': float(sum(item.quantity for item in order.items.all()))
             })
-        
+
+        # Return
         if order_id:
-            # When fetching a specific order, skip pagination metadata
-            return JsonResponse({
-                'success': True,
-                'orders': orders_data,
-            })
+            return JsonResponse({'success': True, 'orders': orders_data})
         else:
             return JsonResponse({
                 'success': True,
@@ -570,9 +623,10 @@ def get_orders(request):
                     'has_previous': page_obj.has_previous()
                 }
             })
-        
     except Exception as e:
+        logger.exception("Unhandled exception in get_orders")
         return JsonResponse({'error': str(e)}, status=500)
+
 
 @csrf_exempt
 @require_http_methods(["POST"])

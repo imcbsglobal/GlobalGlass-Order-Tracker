@@ -1986,8 +1986,9 @@ async function fetchOrders(filters = {}) {
 
   try {
     const params = new URLSearchParams({
-      user_id: String(userData.user_id || ""),
-      client_id: String(userData.client_id || ""),
+  user_id: String((userData.user_id || "").trim()),
+  client_id: String((userData.client_id || "").trim()),
+
       page: String(page),
       per_page: String(perPage),
       _: Date.now().toString(),       // cache-buster
@@ -1999,11 +2000,16 @@ async function fetchOrders(filters = {}) {
 
     const url = `${API_BASE}/api/orders/get/?${params.toString()}`;
 
-    const response = await fetch(url, {
-      method: "GET",
-      headers: { "Accept": "application/json" },
-      signal: controller.signal,
-    });
+    const token = (localStorage.getItem("access_token") || "").trim();
+
+const response = await fetch(url, {
+  method: "GET",
+  headers: {
+    "Accept": "application/json",
+    "Authorization": `Bearer ${token}`
+  },
+  signal: controller.signal,
+});
 
     if (!response.ok) {
       const text = await response.text().catch(() => "");
@@ -2178,11 +2184,27 @@ async function fetchOrders(filters = {}) {
 
   let itemDisplayOrder = new Map(); // To store the initial display order
 
-  async function viewOrder(orderId) {
+ async function viewOrder(orderId) {
     try {
-      const response = await fetch(
-        `${API_BASE}/api/orders/get/?user_id=${userData.user_id}&client_id=${userData.client_id}&order_id=${orderId}`
-      );
+      // build trimmed values and token
+      const vUserId = (localStorage.getItem("user_id") || "").trim();
+      const vClientId = (localStorage.getItem("client_id") || "").trim();
+      const vToken = (localStorage.getItem("access_token") || "").trim();
+
+      const vParams = new URLSearchParams({
+        user_id: vUserId,
+        client_id: vClientId,
+        order_id: String(orderId)
+      });
+
+      const response = await fetch(`${API_BASE}/api/orders/get/?${vParams.toString()}`, {
+        method: "GET",
+        headers: {
+          "Accept": "application/json",
+          "Authorization": `Bearer ${vToken}`
+        }
+      });
+
       const data = await response.json();
 
       if (!data.success || !Array.isArray(data.orders) || data.orders.length === 0) {
@@ -2198,7 +2220,7 @@ async function fetchOrders(filters = {}) {
       document.getElementById("modalCustomerName").textContent = order.customer_name || "-";
       document.getElementById("modalCustomerPhone").textContent = order.customer_phone || "-";
       document.getElementById("modalPlace").textContent = order.customer_address || "-";
-      document.getElementById("modalCreatedBy").textContent = userData.user_id || "-";
+      document.getElementById("modalCreatedBy").textContent = vUserId || "-";
       document.getElementById("modalCreatedOn").textContent = formatDateTime(order.created_at);
 
       // Try to fetch server customers and match; fallback to manual customer object if no match
@@ -2206,11 +2228,14 @@ async function fetchOrders(filters = {}) {
       try {
         const customersResp = await fetch("/customers/", {
           headers: {
-            Authorization: `Bearer ${localStorage.getItem("access_token")}`,
-          },
+            "Accept": "application/json",
+            "Authorization": `Bearer ${vToken}`
+          }
         });
         if (customersResp.ok) {
-          customerList = await customersResp.json();
+          // some endpoints return array, some return object — handle both
+          const customersJson = await customersResp.json();
+          customerList = Array.isArray(customersJson) ? customersJson : (customersJson.results || []);
         } else {
           customerList = [];
         }
@@ -2222,7 +2247,7 @@ async function fetchOrders(filters = {}) {
       const matchedCustomer = Array.isArray(customerList)
         ? customerList.find(
             (x) =>
-              x.client_id == (localStorage.getItem("client_id") || userData.client_id) &&
+              (String(x.client_id || x.client || "") === String(vClientId)) &&
               x.name === order.customer_name
           )
         : null;
@@ -2232,7 +2257,7 @@ async function fetchOrders(filters = {}) {
       } else {
         // fallback manual customer so order.html edit mode can use it
         const manualCustomer = {
-          client_id: localStorage.getItem("client_id") || order.client_id || "",
+          client_id: vClientId || order.client_id || "",
           name: order.customer_name || "",
           phone: order.customer_phone || "",
           address: order.customer_address || "",
@@ -2288,41 +2313,40 @@ async function fetchOrders(filters = {}) {
         }
 
         // Render items using the remembered order so rows don't jump after edits
-       const itemsInStableOrder = [...(order.items || [])].sort((a, b) => {
-  const aTime = Date.parse(a.created_at || a.added_at || 0) || 0;
-  const bTime = Date.parse(b.created_at || b.added_at || 0) || 0;
-  if (aTime !== bTime) {
-    return bTime - aTime; // newest first
-  }
-  return (b.id || 0) - (a.id || 0); // fallback by id
-});
+        const itemsInStableOrder = [...(order.items || [])].sort((a, b) => {
+          const aTime = Date.parse(a.created_at || a.added_at || 0) || 0;
+          const bTime = Date.parse(b.created_at || b.added_at || 0) || 0;
+          if (aTime !== bTime) {
+            return bTime - aTime; // newest first
+          }
+          return (b.id || 0) - (a.id || 0); // fallback by id
+        });
 
-itemsInStableOrder.forEach((item, index) => {
-  const row = document.createElement("tr");
-  row.setAttribute("data-item-id", item.id); // handy for future in-place updates
+        itemsInStableOrder.forEach((item, index) => {
+          const row = document.createElement("tr");
+          row.setAttribute("data-item-id", item.id); // handy for future in-place updates
 
           // we pass 'this' to onclick handlers so increase/decrease can inspect the clicked button
-row.innerHTML = `
-  <td>${index + 1}</td>
-  <td>${escapeHtml(item.product_name || item.name || "Unknown product")}</td>
-  <td><span>${formatPrice(
-    item.total_price != null && (item.quantity || item.qty)
-      ? item.total_price / (item.quantity || item.qty || 1)
-      : (item.unit_price != null ? item.unit_price : item.price || 0)
-  )}</span></td>
-  <td>
-    <div class="quantity-control">
-      <button class="quantity-btn negative" onclick="decreaseQuantity(${item.id}, this)" ${((item.quantity || item.qty || 0) <= 1) ? "disabled" : ""}>-</button>
-      <span class="quantity-value" title="Click to set quantity" onclick="manualSetQuantity(${item.id}, ${item.quantity || item.qty || 0})">${item.quantity || item.qty || 0}</span>
-      <button class="quantity-btn" onclick="increaseQuantity(${item.id}, this)">+</button>
-    </div>
-  </td>
-  <td><span>${formatPrice(item.total_price != null ? item.total_price : ((item.quantity || item.qty || 0) * (item.unit_price || item.price || 0)))}</span></td>
-  <td>
-    <button class="action-btn delete-btn" onclick="deleteOrderItem(${item.id})" title="Delete Item">🗑️</button>
-  </td>
-`;
-
+          row.innerHTML = `
+            <td>${index + 1}</td>
+            <td>${escapeHtml(item.product_name || item.name || "Unknown product")}</td>
+            <td><span>${formatPrice(
+              item.total_price != null && (item.quantity || item.qty)
+                ? item.total_price / (item.quantity || item.qty || 1)
+                : (item.unit_price != null ? item.unit_price : item.price || 0)
+            )}</span></td>
+            <td>
+              <div class="quantity-control">
+                <button class="quantity-btn negative" onclick="decreaseQuantity(${item.id}, this)" ${((item.quantity || item.qty || 0) <= 1) ? "disabled" : ""}>-</button>
+                <span class="quantity-value" title="Click to set quantity" onclick="manualSetQuantity(${item.id}, ${item.quantity || item.qty || 0})">${item.quantity || item.qty || 0}</span>
+                <button class="quantity-btn" onclick="increaseQuantity(${item.id}, this)">+</button>
+              </div>
+            </td>
+            <td><span>${formatPrice(item.total_price != null ? item.total_price : ((item.quantity || item.qty || 0) * (item.unit_price || item.price || 0)))}</span></td>
+            <td>
+              <button class="action-btn delete-btn" onclick="deleteOrderItem(${item.id})" title="Delete Item">🗑️</button>
+            </td>
+          `;
           itemsList.appendChild(row);
         });
       }
@@ -2343,6 +2367,7 @@ row.innerHTML = `
       showErrorMessage("Failed to load order details");
     }
   }
+
 
   // Increase / Decrease quantity handlers (receive clicked button as second param)
  function increaseQuantity(itemId, btnEl) {

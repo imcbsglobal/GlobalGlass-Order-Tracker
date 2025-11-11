@@ -458,39 +458,54 @@
             showLoading();
             hideError();
 
-            fetch('/login/', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRFToken': getCSRFToken(),
-                },
-                body: JSON.stringify({
-                    user_id: userId,
-                    client_id: clientId,
-                    password: password
-                })
-            })
-            .then(response => response.json().then(data => ({ status: response.status, body: data })))
-            .then(({ status, body }) => {
-                if (status === 200 && body.success) {
+           fetch('/login/', {
+    method: 'POST',
+    headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': getCSRFToken(),
+    },
+    body: JSON.stringify({
+        user_id: userId,
+        client_id: clientId,
+        password: password
+    })
+})
+.then(response => response.json().then(data => ({ status: response.status, body: data })))
+.then(({ status, body }) => {
+    if (status === 200 && body.success) {
 
-                    localStorage.setItem('access_token', body.token);
-                    localStorage.setItem('user_id', body.user_id);
-                    localStorage.setItem('client_id', body.client_id)
+        // ✅ Prefer "access" if available, fallback to "token"
+        const tokenValue = (body.access || body.token || "").trim();
 
-                    showSuccess();
-                    setTimeout(() => {
-                        window.location.href = "{% url 'index' %}";
-                    }, 1500);
-                } else {
-                    showError(body.message || "Invalid login.");
-                    hideLoading();
-                }
-            })
-            .catch(error => {
-                showError("Server error. Please try again.");
-                hideLoading();
-            });
+        if (!tokenValue) {
+            showError("Login succeeded but no token was returned by the server.");
+            hideLoading();
+            return;
+        }
+
+        // ✅ Store cleaned values (trimmed and lowercased role)
+        localStorage.setItem("access_token", tokenValue);
+        localStorage.setItem("access", tokenValue); // optional alias
+        localStorage.setItem("token", tokenValue);  // optional legacy key
+        localStorage.setItem("user_id", String(body.user_id || "").trim());
+        localStorage.setItem("client_id", String(body.client_id || "").trim());
+        localStorage.setItem("role", String(body.role || "").trim().toLowerCase());
+
+        showSuccess();
+        setTimeout(() => {
+            window.location.href = "{% url 'index' %}";
+        }, 1500);
+
+    } else {
+        showError(body.message || "Invalid login.");
+        hideLoading();
+    }
+})
+.catch(error => {
+    showError("Server error. Please try again.");
+    hideLoading();
+});
+
 
 
         });
