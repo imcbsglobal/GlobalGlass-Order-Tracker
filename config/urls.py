@@ -21,5 +21,6 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('', include('syncdata.urls')),
     path("", include("orderlist_api.urls")),  
+    path("api/order-status/", include("orderlist_status_api.urls")),
     
 ]

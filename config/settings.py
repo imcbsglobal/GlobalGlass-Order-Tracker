@@ -55,6 +55,7 @@ INSTALLED_APPS = [
     "corsheaders",
     'syncdata',
     "orderlist_api",
+    'orderlist_status_api',
 ]
 
 CORS_ALLOW_CREDENTIALS = True  # allow cookies (sessionid, csrftoken) to be sent
