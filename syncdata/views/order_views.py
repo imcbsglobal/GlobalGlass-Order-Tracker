@@ -367,7 +367,7 @@ def clear_cart(request):
 @csrf_exempt
 @require_http_methods(["POST"])
 def place_order(request):
-    """Place order from cart (now properly stores discount_pct and discounted total)"""
+    """Place order from cart (PERCENT discount fixed — stores correct discount_pct)"""
     try:
         data = json.loads(request.body)
         user_id = data.get('user_id')
@@ -376,9 +376,9 @@ def place_order(request):
         customer_phone = data.get('customer_phone', '')
         customer_address = data.get('customer_address', '')
 
-        # Client-side values
+        # user enters discount as PERCENT (example: 20 means 20%)
         subtotal_client = Decimal(str(data.get('subtotal') or '0'))
-        discount_client = Decimal(str(data.get('discount') or '0'))
+        discount_client = Decimal(str(data.get('discount') or '0'))  # THIS IS % NOW
         final_total_client = Decimal(str(data.get('final_total') or '0'))
 
         with transaction.atomic():
@@ -400,7 +400,6 @@ def place_order(request):
             for ci in cart.items.all():
                 qty = ci.quantity or Decimal('0')
                 price = ci.unit_price or Decimal('0')
-
                 orig_total = (qty * price).quantize(Decimal('0.01'))
 
                 lines.append({
@@ -413,19 +412,18 @@ def place_order(request):
 
                 server_subtotal += orig_total
 
-            # -------- DETERMINE DISCOUNT RATIO --------
-            ratio = Decimal('0')
-            if subtotal_client > 0 and abs(subtotal_client - server_subtotal) <= Decimal('0.01'):
-                ratio = (discount_client / subtotal_client)
+            # -------- FIXED: DISCOUNT = PERCENT --------
+            # If user enters 20 → means 20%
+            discount_pct_value = discount_client.quantize(Decimal('0.01'))  # store directly
+
+            # convert % to ratio → 20% → 0.20
+            ratio = (discount_pct_value / Decimal('100')).quantize(Decimal('0.0001'))
 
             # clamp
             if ratio < 0:
                 ratio = Decimal('0')
             if ratio > 1:
                 ratio = Decimal('1')
-
-            # discount percentage to save in DB
-            discount_pct_value = (ratio * Decimal('100')).quantize(Decimal('0.01'))
 
             # -------- MERGE OR NEW ORDER --------
             order_id = data.get('order_id')
@@ -453,20 +451,15 @@ def place_order(request):
                     client_id=client_id
                 )
 
-            # -------- SAVE ORDER ITEMS --------
+            # -------- SAVE ORDER ITEMS WITH CORRECT DISCOUNT --------
             for ln in lines:
-                # discounted line total
                 discounted_line = (
                     ln['orig_total'] * (Decimal('1') - ratio)
                 ).quantize(Decimal('0.01'))
 
-                # discount amount
-                discount_amount = (ln['orig_total'] - discounted_line).quantize(Decimal('0.01'))
-
                 oi = OrderItem.objects.filter(order=order, product_code=ln['code']).first()
 
                 if oi:
-                    # merge quantities
                     oi.quantity = oi.quantity + ln['qty']
                     oi.unit_price = ln['unit']
                     oi.total_price = discounted_line
@@ -500,6 +493,7 @@ def place_order(request):
     except Exception as e:
         logger.exception("Error in place_order")
         return JsonResponse({'error': str(e)}, status=500)
+
 
 
 @csrf_exempt
