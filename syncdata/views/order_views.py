@@ -367,7 +367,7 @@ def clear_cart(request):
 @csrf_exempt
 @require_http_methods(["POST"])
 def place_order(request):
-    """Place order from cart (preserves discount)"""
+    """Place order from cart (now properly stores discount_pct and discounted total)"""
     try:
         data = json.loads(request.body)
         user_id = data.get('user_id')
@@ -376,14 +376,14 @@ def place_order(request):
         customer_phone = data.get('customer_phone', '')
         customer_address = data.get('customer_address', '')
 
-        # optional discount fields coming from cart.html
+        # Client-side values
         subtotal_client = Decimal(str(data.get('subtotal') or '0'))
         discount_client = Decimal(str(data.get('discount') or '0'))
         final_total_client = Decimal(str(data.get('final_total') or '0'))
-        items_client = data.get('items') or []  # [{product_code, quantity, unit_price, total_price}, ...]
 
         with transaction.atomic():
-            # Get cart
+
+            # -------- GET CART --------
             try:
                 cart = Cart.objects.get(
                     customer_name=customer_name,
@@ -393,50 +393,53 @@ def place_order(request):
             except Cart.DoesNotExist:
                 return JsonResponse({'error': 'Cart not found'}, status=404)
 
-            # Build server-side subtotal from cart
+            # -------- BUILD LINES --------
             server_subtotal = Decimal('0.00')
             lines = []
+
             for ci in cart.items.all():
                 qty = ci.quantity or Decimal('0')
                 price = ci.unit_price or Decimal('0')
-                line = {
-                    'code': ci.product_code,
-                    'name': ci.product_name,
-                    'qty': qty,
-                    'unit': price,
-                    'orig_total': (price * qty),
-                }
-                server_subtotal += line['orig_total']
-                lines.append(line)
 
-            # Determine discount ratio.
-            # Prefer the client-provided discount if subtotal matches; else fall back to 0.
+                orig_total = (qty * price).quantize(Decimal('0.01'))
+
+                lines.append({
+                    "code": ci.product_code,
+                    "name": ci.product_name,
+                    "qty": qty,
+                    "unit": price,
+                    "orig_total": orig_total,
+                })
+
+                server_subtotal += orig_total
+
+            # -------- DETERMINE DISCOUNT RATIO --------
             ratio = Decimal('0')
             if subtotal_client > 0 and abs(subtotal_client - server_subtotal) <= Decimal('0.01'):
-                # accept client discount
-                ratio = (discount_client / subtotal_client) if subtotal_client != 0 else Decimal('0')
+                ratio = (discount_client / subtotal_client)
+
             # clamp
             if ratio < 0:
                 ratio = Decimal('0')
             if ratio > 1:
                 ratio = Decimal('1')
 
-            # --- Decide whether to merge into an existing order or create a new one ---
-            order_id = data.get('order_id')  # optional order id from frontend
-            action = (data.get('action') or '').lower()  # e.g. "merge"
+            # discount percentage to save in DB
+            discount_pct_value = (ratio * Decimal('100')).quantize(Decimal('0.01'))
+
+            # -------- MERGE OR NEW ORDER --------
+            order_id = data.get('order_id')
+            action = (data.get('action') or '').lower()
 
             order = None
-            if action == 'merge' and order_id:
+            if action == "merge" and order_id:
                 try:
-                    # Try to load the specified order and ensure it belongs to same user/client
                     order = Order.objects.get(id=order_id, user_id=user_id, client_id=client_id)
-                    # Only allow merging into pending orders by default
-                    if order.status != 'pending':
+                    if order.status != "pending":
                         return JsonResponse({'error': 'Can only merge into pending orders'}, status=400)
                 except Order.DoesNotExist:
                     order = None
 
-            # If no existing order to merge into, create a NEW one
             if order is None:
                 order_number = f"ORD-{timezone.localdate().strftime('%Y%m%d')}-{uuid.uuid4().hex[:8].upper()}"
                 order = Order.objects.create(
@@ -445,19 +448,29 @@ def place_order(request):
                     customer_phone=customer_phone,
                     customer_address=customer_address,
                     total_amount=Decimal('0.00'),
-                    status='pending',   # keep default pending
+                    status='pending',
                     user_id=user_id,
                     client_id=client_id
                 )
 
-            # Merge cart → order with discounted totals
+            # -------- SAVE ORDER ITEMS --------
             for ln in lines:
-                discounted_line = (ln['orig_total'] * (Decimal('1') - ratio)).quantize(Decimal('0.01'))
+                # discounted line total
+                discounted_line = (
+                    ln['orig_total'] * (Decimal('1') - ratio)
+                ).quantize(Decimal('0.01'))
+
+                # discount amount
+                discount_amount = (ln['orig_total'] - discounted_line).quantize(Decimal('0.01'))
+
                 oi = OrderItem.objects.filter(order=order, product_code=ln['code']).first()
+
                 if oi:
-                    oi.quantity = (oi.quantity or Decimal('0')) + ln['qty']
-                    oi.total_price = (oi.total_price or Decimal('0.00')) + discounted_line
-                    oi.unit_price = ln['unit']  # keep latest unit
+                    # merge quantities
+                    oi.quantity = oi.quantity + ln['qty']
+                    oi.unit_price = ln['unit']
+                    oi.total_price = discounted_line
+                    oi.discount_pct = discount_pct_value
                     oi.save()
                 else:
                     OrderItem.objects.create(
@@ -467,13 +480,14 @@ def place_order(request):
                         quantity=ln['qty'],
                         unit_price=ln['unit'],
                         total_price=discounted_line,
+                        discount_pct=discount_pct_value
                     )
 
-            # Recompute order total as sum of discounted line totals
+            # -------- UPDATE ORDER TOTAL --------
             order.total_amount = sum(i.total_price for i in order.items.all())
             order.save()
 
-            # Clear cart
+            # -------- CLEAR CART --------
             cart.delete()
 
             return JsonResponse({
@@ -484,7 +498,9 @@ def place_order(request):
             })
 
     except Exception as e:
+        logger.exception("Error in place_order")
         return JsonResponse({'error': str(e)}, status=500)
+
 
 @csrf_exempt
 @require_http_methods(["GET"])
