@@ -3,6 +3,11 @@ from rest_framework.response import Response
 from rest_framework import status
 from syncdata.models import Order  # Use the existing Order model
 from syncdata.permissions import TokenOnlyPermission
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+from syncdata.models import Order
+from syncdata.permissions import TokenOnlyPermission
 
 class OrderStatusUpdateView(APIView):
     permission_classes = [TokenOnlyPermission]
@@ -10,17 +15,19 @@ class OrderStatusUpdateView(APIView):
     def post(self, request):
         """
         API to update order status.
-        Required fields:
-          - order_id
-          - status (pending | completed | cancelled)
+        Required:
+            - order_id
+            - status (pending | completed | cancelled)
+            - client_id
         """
         order_id = request.data.get("order_id")
         new_status = request.data.get("status")
+        client_id = request.data.get("client_id")
 
         # Validate input
-        if not order_id or not new_status:
+        if not order_id or not new_status or not client_id:
             return Response(
-                {"success": False, "message": "order_id and status are required."},
+                {"success": False, "message": "order_id, status and client_id are required."},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
@@ -31,7 +38,9 @@ class OrderStatusUpdateView(APIView):
             )
 
         try:
-            order = Order.objects.get(id=order_id)
+            # Update only if the order belongs to this client
+            order = Order.objects.get(id=order_id, client_id=client_id)
+
             order.status = new_status
             order.save()
 
@@ -42,6 +51,7 @@ class OrderStatusUpdateView(APIView):
 
         except Order.DoesNotExist:
             return Response(
-                {"success": False, "message": "Order not found."},
+                {"success": False, "message": "Order not found for this client."},
                 status=status.HTTP_404_NOT_FOUND
             )
+

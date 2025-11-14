@@ -1,6 +1,7 @@
 from decimal import Decimal
 from django.db import models
 from django.contrib.auth.models import User
+from decimal import Decimal
 
 class Client(models.Model):
     id = models.CharField(max_length=50, primary_key=True) 
@@ -80,9 +81,9 @@ class AccProductBatch(models.Model):
     @property
     def discounted_price(self):
         """Return discounted price (e.g., 10% off)"""
-        discount_rate = 0.10  # 10% discount
+        discount_rate = Decimal("0.10")  # use Decimal instead of float
         if self.salesprice:
-            return self.salesprice * (1 - discount_rate)
+            return self.salesprice * (Decimal("1.00") - discount_rate)
         return None
 
     class Meta:
