@@ -1462,6 +1462,36 @@
   }
 }
 
+.status-filter {
+  width: 150px;
+  padding: 8px 12px;
+  font-size: 14px;
+  border-radius: 8px;
+  border: none;
+  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+  color: white;
+  font-weight: 500;
+  cursor: pointer;
+  box-shadow: 0 4px 10px rgba(59,130,246,0.3);
+  outline: none;
+  transition: 0.25s ease;
+}
+
+.status-filter:hover {
+  background: linear-gradient(135deg, #2563eb, #1e40af);
+  box-shadow: 0 6px 14px rgba(37,99,235,0.4);
+}
+
+.status-filter:focus {
+  box-shadow: 0 0 0 3px rgba(96,165,250,0.4);
+}
+
+.status-filter option {
+  color: #1e3a8a;
+  background: white;
+}
+
+
     </style>
   </head>
 
@@ -1513,6 +1543,10 @@
   placeholder="Search by Entry Number or Order ID"
   style="min-width: 250px"
 />
+
+  
+
+
 
               </div>
 
@@ -1608,7 +1642,20 @@
             </div>
           </div>
          <!-- Refresh Button -->
-<div style="display: flex; justify-content: flex-end; margin-top: -20px;">
+<div style="display: flex; justify-content: flex-end; align-items: center; gap: 12px; margin-top: -20px;">
+
+  <!-- 🔥 STATUS FILTER MOVED HERE -->
+ <div id="statusFilterWrapper" style="display: inline-block;">
+  <select id="statusFilter" class="status-filter">
+    <option value="">All Status</option>
+    <option value="pending">Pending</option>
+    <option value="completed">Completed</option>
+    <option value="cancelled">Cancel</option>
+  </select>
+</div>
+
+
+  <!-- 🔄 Refresh Button -->
   <button
     id="refreshButton"
     style="
@@ -1626,7 +1673,9 @@
   >
     🔄 Refresh
   </button>
+
 </div>
+
 <!-- View Pending (toggle) -->
 <div style="display:flex; align-items:center; gap:12px;">
   <button id="viewPendingBtn"
@@ -1904,6 +1953,22 @@
     page: 1,
   };
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
   // User data (you'll need to pass this from Django)
   const userData = {
     user_id: localStorage.getItem("user_id"),
@@ -2103,9 +2168,11 @@ const response = await fetch(url, {
         throw new Error(data.error || "Failed to delete order");
       }
     } catch (error) {
-      console.error("Error deleting order:", error);
-      showErrorMessage("Failed to delete order");
-    }
+  console.error("Error deleting order:", error);
+  const msg = (error && error.message) ? error.message : "Failed to delete order";
+  showErrorMessage(msg);
+}
+
   }
 
   async function deleteOrderItem(itemId) {
@@ -2135,10 +2202,25 @@ const response = await fetch(url, {
         throw new Error(data.error || "Failed to delete order item");
       }
     } catch (error) {
-      console.error("Error deleting order item:", error);
-      showErrorMessage("Failed to delete order item");
-    }
+  console.error("Error deleting order item:", error);
+
+  const msg = error?.message || "Failed to delete order item";
+  showErrorMessage(msg);
+}
+
   }
+
+
+  function prettyStatus(status) {
+  if (!status) return "-";
+  const s = String(status).toLowerCase();
+
+  if (s === "pending") return "Pending";
+  if (s === "completed") return "Completed";
+  if (s === "cancelled") return "Cancel"; // what you want to show
+
+  return status;
+}
 
   // UI Functions
   function populateTable(orders = []) {
@@ -2154,30 +2236,30 @@ const response = await fetch(url, {
     orders.forEach((order) => {
       const row = document.createElement("tr");
       row.setAttribute("data-order-id", order.id); // <-- add this
-      row.innerHTML = `
-        <td>${order.order_number}</td>
-        <td>${formatDateTime(order.updated_at || order.created_at)}</td>
+row.innerHTML = `
+  <td>${order.order_number}</td>
+  <td>${formatDateTime(order.updated_at || order.created_at)}</td>
 
-        <td>${localStorage.getItem("user_id") || "Guest"}</td>
-        <td>${order.customer_name || "-"}</td>
-        <td>${order.customer_phone || "-"}</td>
-       <td><span>${order.total_quantity || 0}</span></td>
+  <td>${order.user_id || "-"}</td>
+  <td>${order.customer_name || "-"}</td>
+  <td>${order.customer_phone || "-"}</td>
+  <td><span>${order.total_quantity || 0}</span></td>
   <td><span>${formatPrice(order.total_amount || 0)}</span></td>
 
-        <td>
-          <button class="action-btn view-btn" onclick="viewOrder(${order.id})" title="View Details">Show Items</button>
-        </td>
-        <td>
-          <select onchange="updateOrderStatus(${order.id}, this.value)" class="status-badge status-${order.status}">
-            <option value="pending" ${order.status === "pending" ? "selected" : ""}>Pending</option>
-            <option value="completed" ${order.status === "completed" ? "selected" : ""}>Completed</option>
-            <option value="cancelled" ${order.status === "cancelled" ? "selected" : ""}>Sold Out</option>
-          </select>
-        </td>
-        <td>
-          <button class="action-btn delete-btn" onclick="deleteOrder(${order.id})" title="Delete Order">🗑️</button>
-        </td>
-      `;
+  <td>
+    <button class="action-btn view-btn" onclick="viewOrder(${order.id})" title="View Details">Show Items</button>
+  </td>
+ <td>
+  <span class="status-badge status-${order.status}">
+    ${prettyStatus(order.status)}
+  </span>
+</td>
+
+  <td>
+    <button class="action-btn delete-btn" onclick="deleteOrder(${order.id})" title="Delete Order">🗑️</button>
+  </td>
+`;
+
       tbody.appendChild(row);
     });
   }
@@ -2220,7 +2302,8 @@ const response = await fetch(url, {
       document.getElementById("modalCustomerName").textContent = order.customer_name || "-";
       document.getElementById("modalCustomerPhone").textContent = order.customer_phone || "-";
       document.getElementById("modalPlace").textContent = order.customer_address || "-";
-      document.getElementById("modalCreatedBy").textContent = vUserId || "-";
+      document.getElementById("modalCreatedBy").textContent = order.user_id || "-";
+
       document.getElementById("modalCreatedOn").textContent = formatDateTime(order.created_at);
 
       // Try to fetch server customers and match; fallback to manual customer object if no match
@@ -2629,6 +2712,30 @@ async function loadOrders() {
   // Event Listeners
   document.addEventListener("DOMContentLoaded", function () {
     setupSearch();
+
+        // --- ADMIN-ONLY STATUS DROPDOWN ---
+    const statusFilterWrapper = document.getElementById("statusFilterWrapper");
+    const statusFilter = document.getElementById("statusFilter");
+
+    const role = (localStorage.getItem("role") || "").toLowerCase();
+    const isAdmin = role === "admin" || role === "level3"; // adjust if your roles differ
+
+    if (statusFilterWrapper && !isAdmin) {
+      statusFilterWrapper.style.display = "none";   // hide for non-admin
+    }
+
+     const viewPendingBtn = document.getElementById("viewPendingBtn");
+    if (viewPendingBtn && isAdmin) {
+      viewPendingBtn.style.display = "none";
+    }
+
+    if (statusFilter) {
+      statusFilter.addEventListener("change", function () {
+        currentFilters.status = this.value || "";   // "", "pending", "completed", "cancelled"
+        currentFilters.page = 1;
+        loadOrders();                               // refetch with new status filter
+      });
+    }
 
     // Default to show only today's orders (IST)
     const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });

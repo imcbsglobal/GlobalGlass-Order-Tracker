@@ -430,14 +430,19 @@ def place_order(request):
             action = (data.get('action') or '').lower()
 
             order = None
-            if action == "merge" and order_id:
-                try:
-                    order = Order.objects.get(id=order_id, user_id=user_id, client_id=client_id)
-                    if order.status != "pending":
-                        return JsonResponse({'error': 'Can only merge into pending orders'}, status=400)
-                except Order.DoesNotExist:
-                    order = None
 
+            # 🔴 If order_id is provided at all, always load that order
+            if order_id:
+                order = Order.objects.filter(id=order_id, client_id=client_id).first()
+
+                # If order exists and is NOT pending → block any modification
+                if order and order.status.strip().lower() != "pending":
+                    return JsonResponse(
+                        {'error': 'Only pending orders can be modified'},
+                        status=400
+                    )
+
+            # If we didn't find an order (no order_id, or invalid id) → create new one
             if order is None:
                 order_number = f"ORD-{timezone.localdate().strftime('%Y%m%d')}-{uuid.uuid4().hex[:8].upper()}"
                 order = Order.objects.create(
@@ -450,6 +455,7 @@ def place_order(request):
                     user_id=user_id,
                     client_id=client_id
                 )
+
 
             # -------- SAVE ORDER ITEMS WITH CORRECT DISCOUNT --------
             for ln in lines:
@@ -604,19 +610,21 @@ def get_orders(request):
                 })
 
             orders_data.append({
-                'id': order.id,
-                'order_number': order.order_number,
-                'customer_name': order.customer_name,
-                'customer_phone': order.customer_phone,
-                'customer_address': order.customer_address,
-                'total_amount': float(order.total_amount),
-                'status': order.status,
-                'created_at': timezone.localtime(order.created_at).isoformat() if order.created_at else None,
-                'updated_at': timezone.localtime(order.updated_at).isoformat() if order.updated_at else None,
-                'items': order_items,
-                'item_count': len(order_items),
-                'total_quantity': float(sum(item.quantity for item in order.items.all()))
-            })
+            'id': order.id,
+            'order_number': order.order_number,
+            'customer_name': order.customer_name,
+            'customer_phone': order.customer_phone,
+            'customer_address': order.customer_address,
+            'total_amount': float(order.total_amount),
+            'status': order.status,
+            'created_at': timezone.localtime(order.created_at).isoformat() if order.created_at else None,
+            'updated_at': timezone.localtime(order.updated_at).isoformat() if order.updated_at else None,
+            'items': order_items,
+            'item_count': len(order_items),
+            'total_quantity': float(sum(item.quantity for item in order.items.all())),
+            'user_id': order.user_id,   # 👈 add this line
+        })
+
 
         # Return
         if order_id:
@@ -668,19 +676,30 @@ def delete_order(request):
     try:
         data = json.loads(request.body)
         order_id = data.get('order_id')
-        
+
         order = Order.objects.get(id=order_id)
+
+        # 🔒 Block delete if completed
+        if order.status == 'completed':
+            return JsonResponse(
+                {'error': 'Completed orders cannot be deleted'},
+                status=400
+            )
+
         order.delete()
-        
+
         return JsonResponse({
             'success': True,
             'message': 'Order deleted'
         })
-        
+
     except Order.DoesNotExist:
         return JsonResponse({'error': 'Order not found'}, status=404)
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
+
+    
+
 
 @csrf_exempt
 @require_http_methods(["POST"])
@@ -691,31 +710,39 @@ def update_order_item(request):
         item_id = data.get('item_id')
         quantity = parse_decimal(data.get('quantity', '1'))
 
-        
         if quantity <= 0:
             return delete_order_item(request)
-        
-        order_item = OrderItem.objects.get(id=item_id)
+
+        # 🔒 Load item + its order
+        order_item = OrderItem.objects.select_related('order').get(id=item_id)
+        order = order_item.order
+
+        # 🔒 Block changes if order is completed
+        if order.status == 'completed':
+            return JsonResponse(
+                {'error': 'Completed orders cannot be modified'},
+                status=400
+            )
+
         order_item.quantity = quantity
         order_item.total_price = (order_item.unit_price or Decimal('0')) * (quantity or Decimal('0'))
-
         order_item.save()
-        
+
         # Update order total
-        order = order_item.order
         order.total_amount = sum(item.total_price for item in order.items.all())
         order.save()
-        
+
         return JsonResponse({
             'success': True,
             'totalAmount': order.total_amount,
             'message': 'Order item updated'
         })
-        
+
     except OrderItem.DoesNotExist:
         return JsonResponse({'error': 'Order item not found'}, status=404)
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
+
 
 @csrf_exempt
 @require_http_methods(["POST"])
@@ -724,21 +751,30 @@ def delete_order_item(request):
     try:
         data = json.loads(request.body)
         item_id = data.get('item_id')
-        
-        order_item = OrderItem.objects.get(id=item_id)
+
+        order_item = OrderItem.objects.select_related('order').get(id=item_id)
         order = order_item.order
+
+        # 🔒 Block changes if order is completed
+        if order.status == 'completed':
+            return JsonResponse(
+                {'error': 'Completed orders cannot be modified'},
+                status=400
+            )
+
         order_item.delete()
-        
+
         # Update order total
         order.total_amount = sum(item.total_price for item in order.items.all())
         order.save()
-        
+
         return JsonResponse({
             'success': True,
             'message': 'Order item deleted'
         })
-        
+
     except OrderItem.DoesNotExist:
         return JsonResponse({'error': 'Order item not found'}, status=404)
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
+
