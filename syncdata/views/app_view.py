@@ -61,7 +61,6 @@ class CustomerView(APIView):
             print("❌ Error in POST /customers/:", str(e))
             return Response({"success": False, "message": "Server error"}, status=500)
 
-
 class ProductView(APIView):
     permission_classes = [TokenOnlyPermission]
 
@@ -74,12 +73,11 @@ class ProductView(APIView):
 
         products = AccProduct.objects.filter(client_id=client_id).order_by("code")
 
-        # Dynamically set the page size to the total number of products
         paginator = PageNumberPagination()
-        paginator.page_size = products.count()  # Set page size to the total number of products
+        paginator.page_size = products.count()
         paginated_products = paginator.paginate_queryset(products, request)
 
-        # Fetch all batches in one go
+        # Fetch all batches at once
         batches = AccProductBatch.objects.filter(client_id=client_id)
         batch_map = {batch.productcode: batch for batch in batches}
 
@@ -98,23 +96,26 @@ class ProductView(APIView):
                 "company": product.company,
                 "client_id": product.client_id,
                 "batch": {
-                    # Price values
+                    # ✅ quantity added here
+                    "quantity": batch.quantity if batch else None,
+
+                    # prices
                     "cost": batch.cost if batch else None,
                     "salesprice": batch.salesprice if batch else None,
                     "bmrp": batch.bmrp if batch else None,
                     "secondprice": batch.secondprice if batch else None,
                     "thirdprice": batch.thirdprice if batch else None,
                     "fourthprice": batch.fourthprice if batch else None,
-                    
-                    # Price names (newly added)
+
+                    # price names
                     "cost_name": batch.cost_name if batch else None,
                     "sales_price_name": batch.sales_price_name if batch else None,
                     "bmrp_name": batch.bmrp_name if batch else None,
                     "secondprice_name": batch.secondprice_name if batch else None,
                     "thirdprice_name": batch.thirdprice_name if batch else None,
                     "fourthprice_name": batch.fourthprice_name if batch else None,
-                    
-                    # Other batch info
+
+                    # other info
                     "barcode": batch.barcode if batch else None,
                 } if batch else None
             })

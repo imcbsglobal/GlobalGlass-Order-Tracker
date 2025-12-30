@@ -60,6 +60,13 @@ from django.db import models
 
 class AccProductBatch(models.Model):
     productcode = models.CharField(max_length=30, primary_key=True)
+
+    quantity = models.DecimalField(
+        max_digits=10,
+        decimal_places=3,
+        blank=True,
+        null=True
+    )
     cost = models.DecimalField(max_digits=12, decimal_places=3, blank=True, null=True)
     salesprice = models.DecimalField(max_digits=10, decimal_places=3, blank=True, null=True)
     bmrp = models.DecimalField(max_digits=12, decimal_places=3, blank=True, null=True)
