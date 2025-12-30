@@ -846,6 +846,16 @@ input[id^="editablePrice-"]:hover {
     box-shadow: 0 4px 10px rgba(0,0,0,0.08);
   }
 }
+.product-stock {
+  font-size: 13px;
+  font-weight: 600;
+  color: #065f46;
+  margin-top: 4px;
+}
+
+.stock-value {
+  color: #047857;
+}
 
 </style>
 <body>
@@ -1494,8 +1504,20 @@ productRow.innerHTML = `
      
     </div>
     <div class="product-description">${escapeHtml(description)}</div>
-    <div class="product-specs">Code: ${escapeHtml(product.code || '')}</div>
-    <div id="barcode-${product.code}" class="barcode-placeholder"></div>
+    <div class="product-specs">
+  Code: ${escapeHtml(product.code || '')}
+</div>
+
+
+
+<div id="barcode-${product.code}" class="barcode-placeholder"></div>
+<div class="product-stock">
+  Available Qty:
+  <span class="stock-value">
+    ${product.batch && product.batch.quantity != null ? product.batch.quantity : 0}
+  </span>
+</div>
+
 
 
   </div>
@@ -1528,10 +1550,18 @@ productRow.innerHTML = `
       <div class="quantity-display" id="qty-${product.code}" onclick="enableQuantityInput('${product.code}')">${selectedQuantities[product.code] || 0}</div>
       <button onclick="changeSelectedQuantity('${product.code}', 1)">+</button>
     </div>
-    <button class="add-to-cart-btn" onclick="addToCart('${product.code}')"
-            ${selectedQuantities[product.code] <= 0 ? 'disabled' : ''}
-            title="Add ${selectedQuantities[product.code]} to Cart"
-            style="width:auto !important; height:34px !important; padding:6px 12px !important; font-size:13px !important; white-space:nowrap !important;"></button>
+    <button class="add-to-cart-btn"
+          onclick="addToCart('${product.code}')"
+          ${
+            (
+              selectedQuantities[product.code] <= 0 ||
+              (product.batch && product.batch.quantity <= 0)
+            ) ? 'disabled' : ''
+          }
+          title="Add ${selectedQuantities[product.code]} to Cart"
+          style="width:auto !important; height:34px !important; padding:6px 12px !important; font-size:13px !important; white-space:nowrap !important;">
+  </button>
+
   </div>
 </div>
 
