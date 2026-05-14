@@ -7,7 +7,8 @@ from rest_framework.response import Response
 from rest_framework import status
 from rest_framework_simplejwt.tokens import AccessToken
 
-from syncdata.models import AccUsers
+from syncdata.models import AccUsers, ClientLicense
+from syncdata.license_check import sync_licenses_from_server, validate_client_license
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +70,17 @@ class LoginView(APIView):
                     "message": "No role assigned. Contact administrator."
                 }, status=status.HTTP_403_FORBIDDEN)
 
+            # 🆕 LICENSE CHECK: sync from activation server first, then check locally
+            sync_licenses_from_server()  # pull latest from activate.imcbs.com
+
+            is_valid, lic_message = validate_client_license(client_id)
+            if not is_valid:
+                logger.warning("Login blocked for client_id=%s: %s", client_id, lic_message)
+                return Response({
+                    "success": False,
+                    "message": f"License error: {lic_message}. Please contact support."
+                }, status=status.HTTP_403_FORBIDDEN)
+
             # Normalize role: remove spaces, lowercase (ex: "Level 3" → "level3")
             normalized_role = str(user.role).strip().lower().replace(" ", "")
 
@@ -78,9 +90,7 @@ class LoginView(APIView):
             token["client_id"] = str(client_id).strip()
             token["role"] = normalized_role
 
-
             logger.info("Created token for %s: role=%s, client=%s", user.id, token["role"], token["client_id"])
-
 
             return Response({
                 "success": True,

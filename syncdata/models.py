@@ -1,7 +1,7 @@
 from decimal import Decimal
 from django.db import models
 from django.contrib.auth.models import User
-from decimal import Decimal
+
 
 class Client(models.Model):
     id = models.CharField(max_length=50, primary_key=True) 
@@ -11,6 +11,7 @@ class Client(models.Model):
     class Meta:
         db_table = 'clients'
         managed = False 
+
 
 class AccMaster(models.Model):
     code = models.CharField(max_length=30, primary_key=True)
@@ -39,7 +40,6 @@ class ManualCustomer(models.Model):
         unique_together = ('client_id', 'name') 
 
 
-
 class AccProduct(models.Model):
     code = models.CharField(max_length=30, primary_key=True)
     name = models.CharField(max_length=200, blank=True, null=True)
@@ -55,8 +55,6 @@ class AccProduct(models.Model):
         db_table = 'acc_product'
         managed = False
 
-
-from django.db import models
 
 class AccProductBatch(models.Model):
     productcode = models.CharField(max_length=30, primary_key=True)
@@ -98,8 +96,6 @@ class AccProductBatch(models.Model):
         managed = False
 
 
-
-
 class AccUsers(models.Model):
     id = models.CharField(max_length=30, primary_key=True)
     pass_field = models.CharField(
@@ -111,7 +107,9 @@ class AccUsers(models.Model):
         db_table = 'acc_users'
         managed = False
 
-# New models for order management
+
+# ─── Order Management ─────────────────────────────────────────────────────────
+
 class Order(models.Model):
     id = models.AutoField(primary_key=True)
     order_number = models.CharField(max_length=50, unique=True)
@@ -128,6 +126,7 @@ class Order(models.Model):
     class Meta:
         db_table = 'orders'
         ordering = ['-created_at']
+
 
 class OrderItem(models.Model):
     id = models.AutoField(primary_key=True)
@@ -149,6 +148,9 @@ class OrderItem(models.Model):
     class Meta:
         db_table = 'order_items'
 
+
+# ─── Cart Management ──────────────────────────────────────────────────────────
+
 class Cart(models.Model):
     id = models.AutoField(primary_key=True)
     customer_name = models.CharField(max_length=250)
@@ -162,6 +164,7 @@ class Cart(models.Model):
     class Meta:
         db_table = 'carts'
         unique_together = ('customer_name', 'user_id', 'client_id')
+
 
 class CartItem(models.Model):
     id = models.AutoField(primary_key=True)
@@ -181,3 +184,24 @@ class CartItem(models.Model):
     class Meta:
         db_table = 'cart_items'
         unique_together = ('cart', 'product_code')
+
+
+# ─── Licensing ────────────────────────────────────────────────────────────────
+
+class ClientLicense(models.Model):
+    client_id = models.CharField(max_length=50, unique=True)
+    license_key = models.CharField(max_length=100, unique=True)
+    is_active = models.BooleanField(default=True)
+    expires_at = models.DateTimeField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'client_licenses'
+
+    def is_valid(self):
+        from django.utils import timezone
+        return self.is_active and self.expires_at > timezone.now()
+
+    def __str__(self):
+        return f"{self.client_id} — {'✅ Active' if self.is_valid() else '❌ Expired/Inactive'}"

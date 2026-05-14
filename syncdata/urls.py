@@ -14,10 +14,10 @@ from syncdata.views.order_views import (
 
 from syncdata.views.app_view import CustomerView, ProductView
 
+# 🆕 License View
+from syncdata.views.license_view import LicenseStatusView
+
 urlpatterns = [
-
-
-    
 
     # Auth
     path('', LoginView.as_view(), name='login'),
@@ -55,4 +55,7 @@ urlpatterns = [
     # 📋 Order Item Management API
     path('api/orders/update-item/', update_order_item, name='update_order_item'),
     path('api/orders/delete-item/', delete_order_item, name='delete_order_item'),
+
+    # 🆕 License API
+    path('api/license/status/', LicenseStatusView.as_view(), name='license_status'),
 ]

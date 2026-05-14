@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Order, OrderItem, Cart, CartItem
+from .models import Order, OrderItem, Cart, CartItem, ClientLicense
 
 @admin.register(Order)
 class OrderAdmin(admin.ModelAdmin):
@@ -28,3 +28,10 @@ class CartItemAdmin(admin.ModelAdmin):
     list_display = ['cart', 'product_name', 'quantity', 'unit_price']
     list_filter = ['cart__created_at']
     search_fields = ['product_name', 'product_code']
+
+@admin.register(ClientLicense)
+class ClientLicenseAdmin(admin.ModelAdmin):
+    list_display = ['client_id', 'license_key', 'is_active', 'expires_at', 'created_at']
+    list_filter = ['is_active']
+    search_fields = ['client_id', 'license_key']
+    readonly_fields = ['created_at', 'updated_at']

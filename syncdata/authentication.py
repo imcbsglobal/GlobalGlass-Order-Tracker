@@ -1,10 +1,9 @@
 # File: syncdata/authentication.py
-# Replace the existing CustomJWTAuthentication.get_user(...) with the code below.
 
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework_simplejwt.settings import api_settings
 from rest_framework.exceptions import AuthenticationFailed
-from syncdata.models import AccUsers
+from syncdata.models import AccUsers, ClientLicense
 import logging
 
 logger = logging.getLogger(__name__)
@@ -43,6 +42,23 @@ class CustomJWTAuthentication(JWTAuthentication):
                 # explicit fail: exact pair not found
                 logger.warning("Auth failed: no AccUsers row for id=%s client_id=%s", user_id, client_id)
                 raise AuthenticationFailed("User not found for provided client_id", code="user_not_found_client")
+
+            # 🆕 LICENSE CHECK
+            try:
+                lic = ClientLicense.objects.get(client_id=client_id)
+                if not lic.is_valid():
+                    logger.warning("License expired or inactive for client_id=%s", client_id)
+                    raise AuthenticationFailed(
+                        "License expired or inactive. Please contact support.",
+                        code="license_expired"
+                    )
+            except ClientLicense.DoesNotExist:
+                logger.warning("No license found for client_id=%s", client_id)
+                raise AuthenticationFailed(
+                    "No license found for this client. Please contact support.",
+                    code="license_not_found"
+                )
+
             return user
 
         # No client_id in token: try to resolve by user_id only, but guard against duplicates
